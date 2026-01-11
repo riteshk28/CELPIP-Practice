@@ -1,0 +1,82 @@
+
+import { PracticeSet, Attempt, User } from '../types';
+
+// On Vercel, the backend is on the same domain, so we use a relative path.
+const API_URL = '/api';
+
+export const API = {
+  // Login
+  login: async (email: string, password: string): Promise<User | null> => {
+    try {
+      const res = await fetch(`${API_URL}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      console.error("Login failed", e);
+      return null;
+    }
+  },
+
+  // Get All Sets
+  getSets: async (): Promise<PracticeSet[]> => {
+    try {
+      const res = await fetch(`${API_URL}/sets`);
+      if (!res.ok) throw new Error('Failed to fetch sets');
+      return await res.json();
+    } catch (e) {
+      console.error(e);
+      return [];
+    }
+  },
+
+  // Save Set (Create/Update)
+  saveSet: async (set: PracticeSet) => {
+    try {
+      await fetch(`${API_URL}/sets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(set),
+      });
+    } catch (e) {
+      console.error("Save set failed", e);
+    }
+  },
+
+  // Delete Set
+  deleteSet: async (setId: string) => {
+    try {
+      await fetch(`${API_URL}/sets/${setId}`, { method: 'DELETE' });
+    } catch (e) {
+      console.error("Delete set failed", e);
+    }
+  },
+
+  // Save Attempt
+  saveAttempt: async (attempt: Attempt) => {
+    try {
+      await fetch(`${API_URL}/attempts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(attempt),
+      });
+    } catch (e) {
+      console.error("Save attempt failed", e);
+    }
+  },
+
+  // Get Attempts
+  getAttempts: async (userId: string): Promise<Attempt[]> => {
+    try {
+      const res = await fetch(`${API_URL}/attempts/${userId}`);
+      if (!res.ok) return [];
+      return await res.json();
+    } catch (e) {
+      console.error(e);
+      return [];
+    }
+  }
+};

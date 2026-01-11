@@ -1,0 +1,64 @@
+
+export type UserRole = 'admin' | 'user';
+
+export interface User {
+  id: string;
+  email: string;
+  role: UserRole;
+  name?: string;
+}
+
+export type SectionType = 'READING' | 'WRITING' | 'LISTENING' | 'SPEAKING';
+export type QuestionType = 'MCQ' | 'CLOZE' | 'PASSAGE';
+
+export interface Question {
+  id: string;
+  partId: string;
+  text: string; // For Cloze, this corresponds to the placeholder ID (e.g., "1"). For Passage, this is the content.
+  type: QuestionType;
+  options?: string[]; // For MCQ/Cloze
+  correctAnswer?: string; // For auto-grading
+  weight: number;
+}
+
+export interface Part {
+  id: string;
+  sectionId: string;
+  contentText: string; // Main Passage (Left Side)
+  imageData?: string; // Base64
+  instructions?: string;
+  questions: Question[]; // Now contains MCQs, CLOZE definitions, AND PASSAGE blocks mixed
+  timerSeconds: number; // Duration for this specific part
+}
+
+export interface Section {
+  id: string;
+  setId: string;
+  type: SectionType;
+  title: string;
+  parts: Part[];
+}
+
+export interface PracticeSet {
+  id: string;
+  title: string;
+  description: string;
+  isPublished: boolean;
+  sections: Section[];
+}
+
+export interface Attempt {
+  id: string;
+  userId: string;
+  setId: string;
+  setTitle: string;
+  date: string;
+  sectionScores: Record<string, number>; // SectionId -> Score
+  bandScore?: number;
+}
+
+export interface AppState {
+  user: User | null;
+  sets: PracticeSet[];
+  attempts: Attempt[];
+}
