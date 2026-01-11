@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, PracticeSet, Attempt, QuestionType } from './types';
-import { API } from './services/api'; // Changed from MockDB
+import { API } from './services/api';
 import { Button } from './components/Button';
 import { Input, TextArea } from './components/Input';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -29,22 +30,37 @@ const Dropdown: React.FC<{
 
 // --- SUB-COMPONENTS --- //
 
-// 1. LOGIN SCREEN
+// 1. LOGIN / SIGNUP SCREEN
 const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
+  const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
     
-    // Call API
-    const user = await API.login(email, password);
+    let user: User | null = null;
+
+    if (isSignUp) {
+      if (!name.trim()) {
+        setError('Name is required.');
+        setLoading(false);
+        return;
+      }
+      user = await API.signup(email, password, name);
+      if (!user) setError('Registration failed. Email might be taken.');
+    } else {
+      user = await API.login(email, password);
+      if (!user) setError('Invalid credentials.');
+    }
+
     setLoading(false);
-    
     if (user) onLogin(user);
-    else alert('Invalid credentials. (Ensure DB is set up and Admin user exists)');
   };
 
   return (
@@ -54,7 +70,25 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">CELPrep<span className="text-blue-600">Master</span></h1>
            <p className="text-slate-500 mt-2">Professional CELPIP Preparation</p>
         </div>
+        
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded border border-red-100 text-center">
+            {error}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-5">
+          {isSignUp && (
+            <Input 
+              label="Full Name" 
+              type="text" 
+              placeholder="John Doe" 
+              value={name} 
+              onChange={e => setName(e.target.value)} 
+              required={isSignUp}
+              className="bg-white text-slate-900"
+            />
+          )}
           <Input 
             label="Email Address" 
             type="email" 
@@ -74,12 +108,20 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
             className="bg-white text-slate-900"
           />
           <Button type="submit" className="w-full py-3 text-base shadow-blue-200 shadow-lg" disabled={loading}>
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? 'Processing...' : (isSignUp ? 'Create Account' : 'Sign In')}
           </Button>
         </form>
-        <div className="mt-6 text-xs text-slate-400 text-center bg-slate-50 p-3 rounded border border-slate-100">
-          <p className="font-semibold">Default Admin:</p>
-          <p>admin@celprep.com / admin123</p>
+
+        <div className="mt-6 text-center">
+          <p className="text-sm text-slate-500">
+            {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+            <button 
+              onClick={() => { setIsSignUp(!isSignUp); setError(''); }} 
+              className="font-bold text-blue-600 hover:text-blue-700 hover:underline focus:outline-none"
+            >
+              {isSignUp ? "Sign In" : "Sign Up"}
+            </button>
+          </p>
         </div>
       </div>
     </div>

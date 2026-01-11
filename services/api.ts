@@ -21,6 +21,22 @@ export const API = {
     }
   },
 
+  // Signup
+  signup: async (email: string, password: string, name: string): Promise<User | null> => {
+    try {
+      const res = await fetch(`${API_URL}/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, name }),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      console.error("Signup failed", e);
+      return null;
+    }
+  },
+
   // Get All Sets
   getSets: async (): Promise<PracticeSet[]> => {
     try {

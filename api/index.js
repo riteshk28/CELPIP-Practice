@@ -37,7 +37,38 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// 2. GET SETS
+// 2. SIGNUP
+app.post('/api/signup', async (req, res) => {
+  const { email, password, name } = req.body;
+  const client = await pool.connect();
+
+  try {
+    // Check if user exists
+    const check = await client.query('SELECT id FROM users WHERE email = $1', [email]);
+    if (check.rows.length > 0) {
+      return res.status(400).json({ error: 'Email already exists' });
+    }
+
+    // Insert new user
+    const newId = `user-${Date.now()}`;
+    const role = 'user'; // Default role
+    
+    // NOTE: In production, password must be hashed!
+    await client.query(
+      'INSERT INTO users (id, email, password_hash, role, name) VALUES ($1, $2, $3, $4, $5)',
+      [newId, email, password, role, name]
+    );
+
+    res.json({ id: newId, email, role, name });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// 3. GET SETS
 app.get('/api/sets', async (req, res) => {
   try {
     const query = `
@@ -82,7 +113,7 @@ app.get('/api/sets', async (req, res) => {
   }
 });
 
-// 3. SAVE SET
+// 4. SAVE SET
 app.post('/api/sets', async (req, res) => {
   const set = req.body;
   const client = await pool.connect();
@@ -127,7 +158,7 @@ app.post('/api/sets', async (req, res) => {
   }
 });
 
-// 4. DELETE SET
+// 5. DELETE SET
 app.delete('/api/sets/:id', async (req, res) => {
   try {
     await pool.query('DELETE FROM practice_sets WHERE id = $1', [req.params.id]);
@@ -137,7 +168,7 @@ app.delete('/api/sets/:id', async (req, res) => {
   }
 });
 
-// 5. SAVE ATTEMPT
+// 6. SAVE ATTEMPT
 app.post('/api/attempts', async (req, res) => {
   const att = req.body;
   try {
@@ -151,7 +182,7 @@ app.post('/api/attempts', async (req, res) => {
   }
 });
 
-// 6. GET ATTEMPTS
+// 7. GET ATTEMPTS
 app.get('/api/attempts/:userId', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM attempts WHERE user_id = $1', [req.params.userId]);
