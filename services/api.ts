@@ -50,15 +50,22 @@ export const API = {
   },
 
   // Save Set (Create/Update)
-  saveSet: async (set: PracticeSet) => {
+  saveSet: async (set: PracticeSet): Promise<boolean> => {
     try {
-      await fetch(`${API_URL}/sets`, {
+      const res = await fetch(`${API_URL}/sets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(set),
       });
+      if (!res.ok) {
+        const err = await res.json();
+        console.error("Server error:", err);
+        throw new Error(err.error || 'Save failed');
+      }
+      return true;
     } catch (e) {
       console.error("Save set failed", e);
+      return false;
     }
   },
 

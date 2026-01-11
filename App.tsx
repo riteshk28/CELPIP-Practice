@@ -132,6 +132,7 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
 const AdminDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLogout }) => {
   const [sets, setSets] = useState<PracticeSet[]>([]);
   const [editingSet, setEditingSet] = useState<PracticeSet | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const refreshSets = async () => {
     const updatedSets = await API.getSets();
@@ -165,9 +166,16 @@ const AdminDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, 
 
   const handleSaveSet = async () => {
     if (editingSet) {
-      await API.saveSet(editingSet);
-      await refreshSets();
-      setEditingSet(null);
+      setIsSaving(true);
+      const success = await API.saveSet(editingSet);
+      setIsSaving(false);
+      
+      if (success) {
+        await refreshSets();
+        setEditingSet(null);
+      } else {
+        alert("Failed to save the practice set. Please check the following:\n1. Your internet connection.\n2. That images aren't too large.\n3. The database schema is up to date.");
+      }
     }
   };
 
@@ -177,7 +185,12 @@ const AdminDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, 
         set={editingSet} 
         onChange={setEditingSet} 
         onSave={handleSaveSet} 
-        onCancel={() => setEditingSet(null)} 
+        onCancel={() => {
+          if (window.confirm("Discard unsaved changes?")) {
+            setEditingSet(null);
+          }
+        }}
+        isSaving={isSaving}
       />
     );
   }
@@ -257,7 +270,8 @@ const SetEditor: React.FC<{
   onChange: (s: PracticeSet) => void; 
   onSave: () => void; 
   onCancel: () => void;
-}> = ({ set, onChange, onSave, onCancel }) => {
+  isSaving: boolean;
+}> = ({ set, onChange, onSave, onCancel, isSaving }) => {
   const [activeSectionId, setActiveSectionId] = useState<string | null>(set.sections[0]?.id || null);
 
   const addSection = (type: 'READING' | 'WRITING') => {
@@ -306,7 +320,7 @@ const SetEditor: React.FC<{
     <div className="min-h-screen bg-slate-100 flex flex-col">
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10 shadow-sm">
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="sm" onClick={onCancel}>&larr; Back</Button>
+          <Button variant="outline" size="sm" onClick={onCancel} disabled={isSaving}>&larr; Back</Button>
           <div className="h-6 w-px bg-slate-300"></div>
           <div className="flex flex-col">
              <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1">Set Title</label>
@@ -315,6 +329,7 @@ const SetEditor: React.FC<{
                onChange={e => onChange({ ...set, title: e.target.value })}
                className="font-bold text-lg border border-slate-300 rounded px-2 py-1 text-slate-900 bg-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-96"
                placeholder="e.g. CELPIP Mock Test 1"
+               disabled={isSaving}
              />
           </div>
         </div>
@@ -325,10 +340,13 @@ const SetEditor: React.FC<{
                checked={set.isPublished} 
                onChange={e => onChange({ ...set, isPublished: e.target.checked })} 
                className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+               disabled={isSaving}
              />
              Published
            </label>
-           <Button onClick={onSave} className="shadow-blue-200 shadow-md">Save Changes</Button>
+           <Button onClick={onSave} className="shadow-blue-200 shadow-md min-w-[120px]" disabled={isSaving}>
+             {isSaving ? 'Saving...' : 'Save Changes'}
+           </Button>
         </div>
       </header>
 
@@ -338,10 +356,10 @@ const SetEditor: React.FC<{
           <div className="p-4 border-b border-slate-100 bg-slate-50">
             <h3 className="font-semibold text-slate-700 text-xs uppercase tracking-wider mb-3">Test Sections</h3>
             <div className="grid grid-cols-2 gap-2">
-               <button onClick={() => addSection('READING')} className="flex flex-col items-center justify-center p-2 text-xs bg-white border border-slate-200 rounded hover:border-blue-400 hover:text-blue-600 transition-colors shadow-sm">
+               <button onClick={() => addSection('READING')} disabled={isSaving} className="flex flex-col items-center justify-center p-2 text-xs bg-white border border-slate-200 rounded hover:border-blue-400 hover:text-blue-600 transition-colors shadow-sm disabled:opacity-50">
                   <span className="font-bold">+ Reading</span>
                </button>
-               <button onClick={() => addSection('WRITING')} className="flex flex-col items-center justify-center p-2 text-xs bg-white border border-slate-200 rounded hover:border-green-400 hover:text-green-600 transition-colors shadow-sm">
+               <button onClick={() => addSection('WRITING')} disabled={isSaving} className="flex flex-col items-center justify-center p-2 text-xs bg-white border border-slate-200 rounded hover:border-green-400 hover:text-green-600 transition-colors shadow-sm disabled:opacity-50">
                   <span className="font-bold">+ Writing</span>
                </button>
             </div>
@@ -351,7 +369,7 @@ const SetEditor: React.FC<{
               <div 
                 key={section.id} 
                 className={`group flex items-center justify-between px-3 py-2 rounded-md cursor-pointer transition-all ${activeSectionId === section.id ? 'bg-blue-50 text-blue-700 shadow-sm border border-blue-100' : 'hover:bg-slate-50 text-slate-600 border border-transparent'}`}
-                onClick={() => setActiveSectionId(section.id)}
+                onClick={() => !isSaving && setActiveSectionId(section.id)}
               >
                 <div className="flex items-center gap-2 overflow-hidden">
                    <span className="text-[10px] font-bold opacity-50 w-4">{idx + 1}.</span>
@@ -359,7 +377,8 @@ const SetEditor: React.FC<{
                 </div>
                 <button 
                   onClick={(e) => { e.stopPropagation(); deleteSection(section.id); }}
-                  className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 px-1 transition-opacity"
+                  disabled={isSaving}
+                  className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 px-1 transition-opacity disabled:opacity-0"
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
@@ -380,6 +399,7 @@ const SetEditor: React.FC<{
                   value={activeSection.title} 
                   onChange={e => updateSection(activeSection.id, { title: e.target.value })} 
                   className="bg-white text-slate-900"
+                  disabled={isSaving}
                 />
               </div>
 
@@ -387,7 +407,7 @@ const SetEditor: React.FC<{
               <div className="space-y-6">
                 <div className="flex justify-between items-center border-b border-slate-200 pb-2">
                    <h3 className="text-lg font-bold text-slate-800">Content Parts & Timers</h3>
-                   <Button size="sm" variant="secondary" onClick={() => addPart(activeSection.id)}>+ Add Content</Button>
+                   <Button size="sm" variant="secondary" onClick={() => addPart(activeSection.id)} disabled={isSaving}>+ Add Content</Button>
                 </div>
                 
                 {activeSection.parts.map((part, index) => (
