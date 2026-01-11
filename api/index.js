@@ -83,7 +83,7 @@ app.get('/api/sets', async (req, res) => {
                 'contentText', p.content_text,
                 'imageData', p.image_data,
                 'instructions', p.instructions,
-                'timerSeconds', p.timer_seconds || 600,
+                'timerSeconds', COALESCE(p.timer_seconds, 600),
                 'questions', COALESCE((
                   SELECT json_agg(json_build_object(
                     'id', q.id,
