@@ -28,6 +28,30 @@ const Dropdown: React.FC<{
   </select>
 );
 
+const Modal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+}> = ({ isOpen, onClose, title, children }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+          <h3 className="font-bold text-lg text-slate-800">{title}</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div className="p-6">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- SUB-COMPONENTS --- //
 
 // 1. LOGIN / SIGNUP SCREEN
@@ -980,33 +1004,68 @@ const UserDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, o
   const [history, setHistory] = useState<Attempt[]>([]);
   const [sets, setSets] = useState<PracticeSet[]>([]);
 
+  // Selection Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [configSet, setConfigSet] = useState<PracticeSet | null>(null);
+  const [selectedSections, setSelectedSections] = useState<Set<string>>(new Set());
+
   useEffect(() => {
-    // UPDATED: Using API.getAttempts async
     API.getAttempts(user.id).then(setHistory);
-    // Fetch sets available for user
     API.getSets().then((data) => {
       setSets(data.filter(s => s.isPublished));
     });
   }, [user.id, view]);
 
-  const startTest = (set: PracticeSet) => {
-    setSelectedSet(set);
+  // Handle clicking "Start Practice"
+  const openConfigModal = (set: PracticeSet) => {
+    setConfigSet(set);
+    // Default: Select all sections
+    setSelectedSections(new Set(set.sections.map(s => s.id)));
+    setIsModalOpen(true);
+  };
+
+  const toggleSection = (sectionId: string) => {
+    const newSelection = new Set(selectedSections);
+    if (newSelection.has(sectionId)) {
+      newSelection.delete(sectionId);
+    } else {
+      newSelection.add(sectionId);
+    }
+    setSelectedSections(newSelection);
+  };
+
+  const startTest = () => {
+    if (!configSet) return;
+    
+    // Filter the set to only include selected sections
+    const filteredSections = configSet.sections.filter(s => selectedSections.has(s.id));
+    
+    // Create a runtime copy of the set with only selected sections
+    const runtimeSet = {
+      ...configSet,
+      sections: filteredSections
+    };
+
+    setSelectedSet(runtimeSet);
+    setIsModalOpen(false);
     setView('TEST');
   };
 
   const handleTestComplete = async (results: any) => {
+    // Only happens if selectedSet is not null
+    if (!selectedSet) return;
+
     const newAttempt: Attempt = {
       id: `att-${Date.now()}`,
       userId: user.id,
-      setId: selectedSet!.id,
-      setTitle: selectedSet!.title,
+      setId: selectedSet.id,
+      setTitle: selectedSet.title,
       date: new Date().toLocaleDateString(),
       sectionScores: results.sectionScores,
       bandScore: Math.min(12, Math.round((results.totalCorrect / results.totalPossible) * 12) || 0)
     };
-    // UPDATED: Using API.saveAttempt async
-    await API.saveAttempt(newAttempt);
     
+    await API.saveAttempt(newAttempt);
     setView('HOME');
     setSelectedSet(null);
   };
@@ -1088,10 +1147,10 @@ const UserDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, o
                 className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col hover:shadow-lg transition-all"
               >
                 <div className="h-1.5 bg-gradient-to-r from-blue-500 to-purple-500 w-full"></div>
-                {/* Card Body - Clickable to Start */}
+                {/* Card Body - Clickable to Start (Opens Modal) */}
                 <div 
                   className="p-6 cursor-pointer hover:bg-slate-50 transition-colors flex-1"
-                  onClick={() => startTest(set)}
+                  onClick={() => openConfigModal(set)}
                 >
                   <div className="flex justify-between items-start mb-4">
                     <span className="px-2 py-1 text-[10px] uppercase font-bold tracking-wider rounded-full bg-green-100 text-green-700">
@@ -1114,13 +1173,48 @@ const UserDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, o
                 
                 {/* Card Footer - Actions */}
                 <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end items-center z-10">
-                   <Button size="sm" onClick={() => startTest(set)}>Start Practice</Button>
+                   <Button size="sm" onClick={() => openConfigModal(set)}>Start Practice</Button>
                 </div>
               </div>
             ))}
           </div>
         </section>
       </main>
+
+      {/* Configuration Modal */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title="Configure Your Practice"
+      >
+         <div className="space-y-4">
+            <p className="text-sm text-slate-500">
+               Select the sections you want to practice for <strong>{configSet?.title}</strong>.
+            </p>
+            <div className="space-y-2 border border-slate-100 bg-slate-50 rounded-lg p-3">
+               {configSet?.sections.map(section => (
+                  <label key={section.id} className="flex items-center p-3 bg-white border border-slate-200 rounded cursor-pointer hover:border-blue-400 transition-colors">
+                     <input 
+                        type="checkbox"
+                        className="w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        checked={selectedSections.has(section.id)}
+                        onChange={() => toggleSection(section.id)}
+                     />
+                     <div className="ml-3">
+                        <span className="block text-sm font-bold text-slate-700">{section.type}</span>
+                        <span className="block text-xs text-slate-400">{section.title}</span>
+                     </div>
+                  </label>
+               ))}
+            </div>
+            <div className="flex justify-end pt-4 gap-3">
+               <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancel</Button>
+               <Button onClick={startTest} disabled={selectedSections.size === 0}>
+                  Start Test ({selectedSections.size} Sections)
+               </Button>
+            </div>
+         </div>
+      </Modal>
     </div>
   );
 };
