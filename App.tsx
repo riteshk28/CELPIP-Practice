@@ -984,7 +984,7 @@ const TestRunner: React.FC<{
                  </span>
                </div>
                <TextArea 
-                 className="flex-1 w-full p-6 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none font-mono text-base leading-relaxed bg-white text-slate-900 transition-colors shadow-inner"
+                 className="flex-1 w-full p-6 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none font-mono text-base leading-relaxed bg-white text-slate-900 transition-colors shadow-inner min-h-[500px]"
                  placeholder="Type your response here..."
                  value={writingInputs[section.id] || ''}
                  onChange={(e) => setWritingInputs(prev => ({ ...prev, [section.id]: e.target.value }))}
