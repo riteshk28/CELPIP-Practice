@@ -4,7 +4,7 @@ import { User, PracticeSet, Attempt, QuestionType } from './types';
 import { API } from './services/api';
 import { Button } from './components/Button';
 import { Input, TextArea } from './components/Input';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 // --- HELPER COMPONENTS ---
 
@@ -999,6 +999,7 @@ const TestRunner: React.FC<{
 
 // 6. USER DASHBOARD
 const UserDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLogout }) => {
+  const [activeTab, setActiveTab] = useState<'practice' | 'progress'>('practice');
   const [view, setView] = useState<'HOME' | 'TEST'>('HOME');
   const [selectedSet, setSelectedSet] = useState<PracticeSet | null>(null);
   const [history, setHistory] = useState<Attempt[]>([]);
@@ -1074,11 +1075,26 @@ const UserDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, o
     return <TestRunner set={selectedSet} onComplete={handleTestComplete} onExit={() => setView('HOME')} />;
   }
 
-  // Prepare chart data
-  const chartData = history.map((h, i) => ({
-    name: `Test ${i + 1}`,
-    score: h.bandScore
-  }));
+  // Helper to resolve section type from loaded sets for chart visualization
+  const getSectionType = (setId: string, sectionId: string) => {
+    const set = sets.find(s => s.id === setId);
+    const sec = set?.sections.find(s => s.id === sectionId);
+    return sec?.type;
+  };
+
+  // Prepare chart data with individual section trends
+  // Data structure: [{ date: '...', READING: 10, WRITING: 8 }, ...]
+  const chartData = history.map(h => {
+    const point: any = { date: h.date, name: h.setTitle };
+    Object.entries(h.sectionScores).forEach(([secId, score]) => {
+      const type = getSectionType(h.setId, secId);
+      if (type) {
+        // Plotting raw score for now as band conversion happens elsewhere or needs schema update
+        point[type] = score;
+      }
+    });
+    return point;
+  }).reverse(); // Sort oldest to newest
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
@@ -1095,90 +1111,110 @@ const UserDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, o
         </div>
       </nav>
 
-      <main className="max-w-6xl mx-auto p-6 space-y-10 pb-20">
-        {/* Progress Section */}
-        <section>
-          <div className="flex justify-between items-end mb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-slate-900">Your Progress</h2>
-              <p className="text-slate-500 text-sm mt-1">Track your performance over time</p>
-            </div>
-            {history.length > 0 && (
-              <div className="text-right">
-                <p className="text-xs text-slate-400 uppercase tracking-wider">Latest Score</p>
-                <p className="text-2xl font-bold text-blue-600">Band {history[history.length-1].bandScore}</p>
-              </div>
-            )}
-          </div>
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-72">
-             {chartData.length > 0 ? (
-               <ResponsiveContainer width="100%" height="100%">
-                 <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                   <XAxis dataKey="name" tick={{fontSize: 12, fill: '#94a3b8'}} axisLine={false} tickLine={false} dy={10} />
-                   <YAxis domain={[0, 12]} tick={{fontSize: 12, fill: '#94a3b8'}} axisLine={false} tickLine={false} />
-                   <Tooltip 
-                      cursor={{fill: '#f8fafc'}} 
-                      contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
-                   />
-                   <Bar dataKey="score" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={50} />
-                 </BarChart>
-               </ResponsiveContainer>
-             ) : (
-               <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                 <svg className="w-12 h-12 mb-2 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                 <p>No test history available yet.</p>
-                 <p className="text-sm">Complete a test to see your band score trend.</p>
-               </div>
-             )}
-          </div>
-        </section>
+      {/* TABS NAVIGATION */}
+      <div className="bg-white border-b border-slate-200">
+         <div className="max-w-6xl mx-auto px-6 flex gap-8">
+            <button 
+              onClick={() => setActiveTab('practice')}
+              className={`py-4 text-sm font-bold border-b-2 transition-colors ${activeTab === 'practice' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+            >
+              Practice Sets
+            </button>
+            <button 
+              onClick={() => setActiveTab('progress')}
+              className={`py-4 text-sm font-bold border-b-2 transition-colors ${activeTab === 'progress' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+            >
+              My Progress
+            </button>
+         </div>
+      </div>
 
-        {/* Available Tests */}
-        <section>
-          <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-            Available Practice Sets
-            <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">{sets.length}</span>
-          </h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {sets.map(set => (
-              <div 
-                key={set.id} 
-                className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col hover:shadow-lg transition-all"
-              >
-                <div className="h-1.5 bg-gradient-to-r from-blue-500 to-purple-500 w-full"></div>
-                {/* Card Body - Clickable to Start (Opens Modal) */}
-                <div 
-                  className="p-6 cursor-pointer hover:bg-slate-50 transition-colors flex-1"
-                  onClick={() => openConfigModal(set)}
-                >
-                  <div className="flex justify-between items-start mb-4">
-                    <span className="px-2 py-1 text-[10px] uppercase font-bold tracking-wider rounded-full bg-green-100 text-green-700">
-                      Ready
-                    </span>
-                  </div>
-                  <h3 className="font-bold text-slate-900 mb-2 truncate">{set.title}</h3>
-                  <p className="text-slate-500 text-xs mb-4 h-10 overflow-hidden">{set.description || 'No description provided.'}</p>
-                  <div className="flex items-center gap-2 pt-2 mt-auto">
-                    <div className="flex -space-x-1 overflow-hidden">
-                       {set.sections.slice(0,4).map((s, i) => (
-                         <div key={i} className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-600">
-                           {s.type[0]}
-                         </div>
-                       ))}
-                    </div>
-                    <span className="text-xs text-slate-400">{set.sections.length} Sections</span>
-                  </div>
-                </div>
-                
-                {/* Card Footer - Actions */}
-                <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end items-center z-10">
-                   <Button size="sm" onClick={() => openConfigModal(set)}>Start Practice</Button>
-                </div>
+      <main className="max-w-6xl mx-auto p-6 space-y-10 pb-20">
+        
+        {/* TAB: MY PROGRESS */}
+        {activeTab === 'progress' && (
+          <section className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="flex justify-between items-end mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900">Your Progress</h2>
+                <p className="text-slate-500 text-sm mt-1">Track your band scores across different sections over time.</p>
               </div>
-            ))}
-          </div>
-        </section>
+            </div>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-96">
+               {chartData.length > 0 ? (
+                 <ResponsiveContainer width="100%" height="100%">
+                   <LineChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                     <XAxis dataKey="date" tick={{fontSize: 12, fill: '#94a3b8'}} axisLine={false} tickLine={false} dy={10} />
+                     <YAxis domain={[0, 12]} tick={{fontSize: 12, fill: '#94a3b8'}} axisLine={false} tickLine={false} />
+                     <Tooltip 
+                        contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
+                     />
+                     <Legend wrapperStyle={{paddingTop: '20px'}} iconType="circle" />
+                     <Line type="monotone" dataKey="READING" stroke="#3b82f6" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                     <Line type="monotone" dataKey="WRITING" stroke="#10b981" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                     <Line type="monotone" dataKey="LISTENING" stroke="#f59e0b" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                     <Line type="monotone" dataKey="SPEAKING" stroke="#8b5cf6" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                   </LineChart>
+                 </ResponsiveContainer>
+               ) : (
+                 <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                   <svg className="w-12 h-12 mb-2 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                   <p>No test history available yet.</p>
+                   <p className="text-sm">Complete a test to see your band score trend.</p>
+                 </div>
+               )}
+            </div>
+          </section>
+        )}
+
+        {/* TAB: PRACTICE SETS */}
+        {activeTab === 'practice' && (
+          <section className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+              Available Practice Sets
+              <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">{sets.length}</span>
+            </h2>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {sets.map(set => (
+                <div 
+                  key={set.id} 
+                  className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col hover:shadow-lg transition-all"
+                >
+                  <div className="h-1.5 bg-gradient-to-r from-blue-500 to-purple-500 w-full"></div>
+                  {/* Card Body - Clickable to Start (Opens Modal) */}
+                  <div 
+                    className="p-6 cursor-pointer hover:bg-slate-50 transition-colors flex-1"
+                    onClick={() => openConfigModal(set)}
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <span className="px-2 py-1 text-[10px] uppercase font-bold tracking-wider rounded-full bg-green-100 text-green-700">
+                        Ready
+                      </span>
+                    </div>
+                    <h3 className="font-bold text-slate-900 mb-2 truncate">{set.title}</h3>
+                    <p className="text-slate-500 text-xs mb-4 h-10 overflow-hidden">{set.description || 'No description provided.'}</p>
+                    <div className="flex items-center gap-2 pt-2 mt-auto">
+                      <div className="flex -space-x-1 overflow-hidden">
+                         {set.sections.slice(0,4).map((s, i) => (
+                           <div key={i} className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-600">
+                             {s.type[0]}
+                           </div>
+                         ))}
+                      </div>
+                      <span className="text-xs text-slate-400">{set.sections.length} Sections</span>
+                    </div>
+                  </div>
+                  
+                  {/* Card Footer - Actions */}
+                  <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end items-center z-10">
+                     <Button size="sm" onClick={() => openConfigModal(set)}>Start Practice</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </main>
 
       {/* Configuration Modal */}
