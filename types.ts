@@ -47,14 +47,21 @@ export interface PracticeSet {
   sections: Section[];
 }
 
+export interface SectionResult {
+  score: number;
+  max: number;
+  band: number;
+  type: SectionType;
+}
+
 export interface Attempt {
   id: string;
   userId: string;
   setId: string;
   setTitle: string;
   date: string;
-  sectionScores: Record<string, number>; // SectionId -> Score
-  bandScore?: number;
+  sectionScores: Record<string, SectionResult>; // SectionId -> Detailed Result
+  bandScore?: number; // Overall Average Band
 }
 
 export interface AppState {
