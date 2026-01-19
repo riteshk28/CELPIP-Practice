@@ -1,5 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { User, PracticeSet, Attempt, QuestionType } from './types';
 import { API } from './services/api';
 import { Button } from './components/Button';
@@ -48,6 +49,63 @@ const Modal: React.FC<{
           {children}
         </div>
       </div>
+    </div>
+  );
+};
+
+const RichTextEditor: React.FC<{
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  className?: string;
+}> = ({ value, onChange, placeholder, className }) => {
+  const contentEditableRef = useRef<HTMLDivElement>(null);
+
+  // Initialize content
+  useEffect(() => {
+    if (contentEditableRef.current && contentEditableRef.current.innerHTML !== value) {
+       // Only update if significantly different to avoid cursor jumps, 
+       // but for this simple implementation, we assume external updates are rare while editing.
+       // We use a simple check to handle the initial load.
+       if (contentEditableRef.current.innerHTML === '' && value) {
+           contentEditableRef.current.innerHTML = value;
+       } else if (value !== contentEditableRef.current.innerHTML) {
+           // If the value changed externally (e.g. switching questions), update it
+           contentEditableRef.current.innerHTML = value;
+       }
+    }
+  }, [value]);
+
+  const handleCommand = (command: string, arg: string | undefined = undefined) => {
+    document.execCommand(command, false, arg);
+    if (contentEditableRef.current) {
+      onChange(contentEditableRef.current.innerHTML);
+      contentEditableRef.current.focus();
+    }
+  };
+
+  return (
+    <div className={`border border-slate-300 rounded-md overflow-hidden bg-white flex flex-col ${className}`}>
+      <div className="flex items-center gap-1 border-b border-slate-200 bg-slate-50 p-1.5 sticky top-0 z-10">
+        <button type="button" onClick={() => handleCommand('bold')} className="p-1.5 hover:bg-slate-200 rounded text-slate-700 font-bold" title="Bold">B</button>
+        <button type="button" onClick={() => handleCommand('italic')} className="p-1.5 hover:bg-slate-200 rounded text-slate-700 italic" title="Italic">I</button>
+        <button type="button" onClick={() => handleCommand('underline')} className="p-1.5 hover:bg-slate-200 rounded text-slate-700 underline" title="Underline">U</button>
+        <div className="w-px h-4 bg-slate-300 mx-1"></div>
+        <button type="button" onClick={() => handleCommand('insertUnorderedList')} className="p-1.5 hover:bg-slate-200 rounded text-slate-700" title="Bullet List">
+           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16M4 6l-1 0M4 12l-1 0M4 18l-1 0" /></svg>
+        </button>
+        <button type="button" onClick={() => handleCommand('insertOrderedList')} className="p-1.5 hover:bg-slate-200 rounded text-slate-700" title="Numbered List">
+           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h12M7 13h12M7 19h12M3 7h1M3 13h1M3 19h1" /></svg>
+        </button>
+      </div>
+      <div
+        ref={contentEditableRef}
+        contentEditable
+        className="flex-1 p-4 outline-none prose prose-sm max-w-none min-h-[150px] overflow-y-auto"
+        onInput={(e) => onChange(e.currentTarget.innerHTML)}
+        onBlur={(e) => onChange(e.currentTarget.innerHTML)}
+        data-placeholder={placeholder}
+      />
     </div>
   );
 };
@@ -514,8 +572,6 @@ const PartEditor: React.FC<{
   };
 
   // Logic to calculate numbering for list items
-  // Passages do NOT get a number.
-  // MCQs and Cloze Definitions GET a number.
   let questionCounter = 0;
   const numberedQuestions = part.questions.map((q: any) => {
     if (q.type !== 'PASSAGE') {
@@ -585,17 +641,17 @@ const PartEditor: React.FC<{
         <div className="grid grid-cols-2 gap-8 h-[600px]">
            {/* LEFT COLUMN: Main Passage -> Image */}
            <div className="flex flex-col space-y-4 h-full overflow-hidden">
-              <div className="flex-1 flex flex-col">
+              <div className="flex-1 flex flex-col min-h-0">
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Main Reading Passage</label>
-                <textarea 
-                  className="w-full flex-1 rounded-lg border border-slate-300 p-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono bg-white text-slate-900 leading-relaxed resize-none"
+                <RichTextEditor 
+                  className="w-full flex-1"
                   value={part.contentText}
-                  onChange={e => onChange({ ...part, contentText: e.target.value })}
+                  onChange={val => onChange({ ...part, contentText: val })}
                   placeholder="Paste the main reading passage here..."
                 />
               </div>
 
-              <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shrink-0">
                 <div className="flex justify-between items-center mb-2">
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Reference Image (Optional)</label>
                   {part.imageData && (
@@ -649,17 +705,17 @@ const PartEditor: React.FC<{
                           {/* PASSAGE TYPE */}
                           {q.type === 'PASSAGE' && (
                              <div className="relative">
-                               <textarea 
-                                  className="w-full h-32 rounded border border-slate-300 p-2 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-mono bg-white text-slate-900 leading-relaxed resize-none"
+                               <RichTextEditor
+                                  className="w-full h-40"
                                   value={q.text}
-                                  onChange={e => {
+                                  onChange={val => {
                                     const newQs = [...part.questions];
-                                    newQs[qIdx].text = e.target.value;
+                                    newQs[qIdx].text = val;
                                     onChange({ ...part, questions: newQs });
                                   }}
                                   placeholder={"Type passage here... Use [[1]], [[2]] for blanks."}
                                 />
-                                <div className="absolute bottom-1 right-1 text-[9px] text-slate-400 bg-white/90 px-1 rounded border border-slate-100">
+                                <div className="absolute bottom-1 right-1 text-[9px] text-slate-400 bg-white/90 px-1 rounded border border-slate-100 z-10 pointer-events-none">
                                   Use <strong>[[ID]]</strong> for blanks
                                 </div>
                              </div>
@@ -772,7 +828,170 @@ const PartEditor: React.FC<{
   );
 };
 
-// 5. TEST TAKER INTERFACE
+// --- TestRunner Helpers ---
+
+const ClozeRenderer: React.FC<{
+  htmlContent: string;
+  questions: any[];
+  answers: Record<string, string>;
+  onAnswer: (id: string, val: string) => void;
+}> = ({ htmlContent, questions, answers, onAnswer }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [clozeLocations, setClozeLocations] = useState<{ id: string; element: Element }[]>([]);
+
+  // 1. Prepare HTML: Replace [[id]] with marker spans
+  const processedHtml = React.useMemo(() => {
+    // If content is just plain text with newlines (legacy data), convert to basic HTML
+    let content = htmlContent;
+    if (!content.includes('<') && content.includes('\n')) {
+       // It's likely plain text. Convert newlines to breaks/paragraphs.
+       // But to avoid double wrapping if we have mixed content, we do a simple check.
+       content = content.replace(/\n/g, '<br/>');
+    }
+
+    return content.replace(/\[\[\s*(\w+)\s*\]\]/g, (match, id) => {
+       return `<span id="cloze-slot-${id}" class="cloze-slot inline-block min-w-[120px] mx-1 align-middle"></span>`;
+    });
+  }, [htmlContent]);
+
+  // 2. Find markers after render
+  useLayoutEffect(() => {
+    if (containerRef.current) {
+      const slots = containerRef.current.querySelectorAll('.cloze-slot');
+      const locs: { id: string; element: Element }[] = [];
+      slots.forEach(slot => {
+        const id = slot.id.replace('cloze-slot-', '');
+        locs.push({ id, element: slot });
+      });
+      setClozeLocations(locs);
+    }
+  }, [processedHtml]);
+
+  return (
+    <div className="relative">
+      <div 
+         ref={containerRef}
+         className="prose prose-slate max-w-none text-slate-800 leading-relaxed font-serif text-lg bg-slate-50 p-6 rounded-lg border border-slate-200 shadow-sm mb-6"
+         dangerouslySetInnerHTML={{ __html: processedHtml }}
+      />
+      {clozeLocations.map(loc => {
+        const question = questions.find(q => q.type === 'CLOZE' && q.text === loc.id);
+        if (!question) {
+             return createPortal(
+                 <span className="text-red-500 font-bold text-xs border border-red-300 bg-red-50 px-1 rounded">[[{loc.id}?]]</span>,
+                 loc.element
+             );
+        }
+        return createPortal(
+          <Dropdown
+            options={question.options || []}
+            value={answers[question.id] || ''}
+            onChange={(val) => onAnswer(question.id, val)}
+            placeholder={`[${loc.id}]`}
+            className="w-full font-sans text-sm border-blue-200 bg-white shadow-sm"
+          />,
+          loc.element
+        );
+      })}
+    </div>
+  );
+};
+
+
+// 5. TEST TAKER INTERFACE - REFACTORED FOR REVIEW
+const SectionReview: React.FC<{ 
+    section: any; 
+    answers: Record<string, any>; 
+    onContinue: () => void; 
+}> = ({ section, answers, onContinue }) => {
+   // Calculate metrics
+   let correct = 0;
+   let total = 0;
+   const details: any[] = [];
+
+   section.parts.forEach((part: any, pIdx: number) => {
+      // Group details by Part to give context
+      const partDetails: any[] = [];
+      part.questions.forEach((q: any) => {
+         if (q.type === 'MCQ' || q.type === 'CLOZE') {
+            total++;
+            const isCorrect = answers[q.id] === q.correctAnswer;
+            if (isCorrect) correct++;
+            partDetails.push({ ...q, isCorrect, userAnswer: answers[q.id] });
+         }
+      });
+      if (partDetails.length > 0) {
+          details.push({ partTitle: `Part ${pIdx+1}`, questions: partDetails });
+      }
+   });
+
+   const percentage = total > 0 ? Math.round((correct / total) * 100) : 0;
+
+   return (
+     <div className="h-screen flex flex-col bg-slate-50">
+        <header className="bg-white border-b border-slate-200 px-8 py-6 flex justify-between items-center shadow-sm z-10">
+           <div>
+              <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Section Review: <span className="text-blue-600">{section.type}</span></h2>
+              <p className="text-slate-500 mt-1">Review your performance before moving to the next section.</p>
+           </div>
+           <div className="flex items-center gap-4">
+              <div className="text-right">
+                  <div className="text-3xl font-bold text-slate-900">{correct}<span className="text-slate-400 text-xl">/{total}</span></div>
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Total Score</div>
+              </div>
+              <div className={`h-12 w-12 rounded-full flex items-center justify-center font-bold border-4 ${percentage >= 80 ? 'border-green-500 text-green-600' : percentage >= 50 ? 'border-amber-500 text-amber-600' : 'border-red-500 text-red-600'}`}>
+                 {percentage}%
+              </div>
+           </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-8 space-y-8 max-w-5xl mx-auto w-full">
+            {details.map((group, idx) => (
+                <div key={idx} className="space-y-4">
+                    <h3 className="font-bold text-slate-400 uppercase tracking-wider text-xs border-b border-slate-200 pb-2">{group.partTitle}</h3>
+                    <div className="grid gap-4">
+                        {group.questions.map((item: any) => (
+                            <div key={item.id} className={`p-5 rounded-lg border flex justify-between items-start transition-all shadow-sm ${item.isCorrect ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                                <div className="space-y-2">
+                                    <p className="font-bold text-slate-800 text-sm">
+                                    {item.type === 'CLOZE' ? `Gap [${item.text}]` : item.text}
+                                    </p>
+                                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-6 text-xs">
+                                    <span className={`font-bold flex items-center gap-1 ${item.isCorrect ? "text-green-700" : "text-red-700"}`}>
+                                        Your Answer: <span className="bg-white/50 px-1 rounded">{item.userAnswer || '(Skipped)'}</span>
+                                    </span>
+                                    {!item.isCorrect && (
+                                        <span className="text-slate-600 font-medium flex items-center gap-1">
+                                            Correct Answer: <span className="bg-slate-200/50 px-1 rounded text-slate-800 font-bold">{item.correctAnswer}</span>
+                                        </span>
+                                    )}
+                                    </div>
+                                </div>
+                                <div className="shrink-0 ml-4">
+                                    {item.isCorrect ? (
+                                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-green-200 text-green-700">
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                                        </span>
+                                    ) : (
+                                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-red-200 text-red-700">
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ))}
+        </div>
+
+        <footer className="bg-white border-t border-slate-200 px-8 py-4 flex justify-end sticky bottom-0 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+            <Button size="lg" onClick={onContinue} className="shadow-blue-200 shadow-lg">Continue to Next Section &rarr;</Button>
+        </footer>
+     </div>
+   );
+};
+
 const TestRunner: React.FC<{ 
   set: PracticeSet; 
   onComplete: (score: any) => void; 
@@ -783,6 +1002,7 @@ const TestRunner: React.FC<{
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [timeLeft, setTimeLeft] = useState(0);
   const [writingInputs, setWritingInputs] = useState<Record<string, string>>({});
+  const [showReview, setShowReview] = useState(false);
 
   const section = set.sections[currentSectionIndex];
   const part = section?.parts[currentPartIndex];
@@ -794,12 +1014,12 @@ const TestRunner: React.FC<{
   }, [part]);
 
   useEffect(() => {
-    if (timeLeft <= 0 && part) {
+    if (timeLeft <= 0 && part && !showReview) {
       return; 
     }
     const timer = setInterval(() => setTimeLeft(prev => Math.max(0, prev - 1)), 1000);
     return () => clearInterval(timer);
-  }, [timeLeft, part]);
+  }, [timeLeft, part, showReview]);
 
   const formatTime = (sec: number) => {
     const m = Math.floor(sec / 60);
@@ -808,6 +1028,13 @@ const TestRunner: React.FC<{
   };
 
   const handleNext = () => {
+    // Check if we are at the end of the Reading section to show review
+    const isLastPart = currentPartIndex === section.parts.length - 1;
+    if (isLastPart && section.type === 'READING' && !showReview) {
+        setShowReview(true);
+        return;
+    }
+
     if (currentPartIndex < section.parts.length - 1) {
       setCurrentPartIndex(prev => prev + 1);
     } else if (currentSectionIndex < set.sections.length - 1) {
@@ -816,6 +1043,16 @@ const TestRunner: React.FC<{
     } else {
       finishTest();
     }
+  };
+
+  const handleReviewContinue = () => {
+     setShowReview(false);
+     if (currentSectionIndex < set.sections.length - 1) {
+        setCurrentSectionIndex(prev => prev + 1);
+        setCurrentPartIndex(0);
+     } else {
+        finishTest();
+     }
   };
 
   const finishTest = async () => {
@@ -858,37 +1095,19 @@ const TestRunner: React.FC<{
      return { ...q, displayNum: null };
   }) : [];
 
-  // Inline Cloze Parser Component
-  const renderClozeContent = (text: string, questions: any[]) => {
-    const parts = text.split(/(\[\[\s*\w+\s*\]\])/g);
-    return (
-      <div className="prose prose-slate max-w-none text-slate-800 leading-relaxed font-serif text-lg bg-slate-50 p-4 rounded-lg border border-slate-200 shadow-sm mb-6">
-        {parts.map((chunk, i) => {
-          const match = chunk.match(/\[\[\s*(\w+)\s*\]\]/);
-          if (match) {
-            const placeholderId = match[1];
-            // Find question with text matching the placeholder ID
-            const question = questions.find(q => q.type === 'CLOZE' && q.text === placeholderId);
-            if (question) {
-               return (
-                 <span key={i} className="inline-block mx-1 align-middle">
-                   <Dropdown 
-                     options={question.options || []}
-                     value={answers[question.id] || ''}
-                     onChange={(val) => setAnswers(prev => ({ ...prev, [question.id]: val }))}
-                     placeholder={`[${placeholderId}]`}
-                     className="min-w-[120px] font-sans text-sm border-blue-200 bg-white"
-                   />
-                 </span>
-               );
-            }
-            return <span key={i} className="text-red-500 font-bold font-mono text-sm bg-red-50 px-1 rounded border border-red-200" title="Missing Question Definition">[[{placeholderId}?]]</span>;
-          }
-          return <span key={i}>{chunk}</span>;
-        })}
-      </div>
-    );
+  // Helper to safely render plain text or HTML content for the main left pane
+  const renderMainContent = (content: string) => {
+      // Simple heuristic: if it contains HTML tags, render as HTML.
+      // Otherwise render as text with line breaks converted.
+      if (content.includes('<') && content.includes('>')) {
+          return <div className="prose prose-slate max-w-none text-slate-800 leading-relaxed font-serif text-lg" dangerouslySetInnerHTML={{ __html: content }} />;
+      }
+      return <div className="prose prose-slate max-w-none text-slate-800 leading-relaxed font-serif text-lg whitespace-pre-wrap">{content}</div>;
   };
+
+  if (showReview) {
+     return <SectionReview section={section} answers={answers} onContinue={handleReviewContinue} />;
+  }
 
   if (!section || !part) return <div>Loading...</div>;
 
@@ -927,8 +1146,8 @@ const TestRunner: React.FC<{
                  </div>
              )}
              
-             <div className="prose prose-slate max-w-none text-slate-800 leading-relaxed font-serif text-lg whitespace-pre-line mb-6">
-                {part.contentText}
+             <div className="mb-6">
+                {renderMainContent(part.contentText)}
              </div>
 
              {part.imageData && (
@@ -943,7 +1162,16 @@ const TestRunner: React.FC<{
              <div className="space-y-6 pb-12">
                 {numberedQuestions.map((q: any) => {
                    if (q.type === 'PASSAGE') {
-                      return <React.Fragment key={q.id}>{renderClozeContent(q.text, numberedQuestions)}</React.Fragment>;
+                      return (
+                        <React.Fragment key={q.id}>
+                          <ClozeRenderer 
+                            htmlContent={q.text} 
+                            questions={numberedQuestions} 
+                            answers={answers}
+                            onAnswer={(id, val) => setAnswers(prev => ({ ...prev, [id]: val }))}
+                          />
+                        </React.Fragment>
+                      );
                    }
                    if (q.type === 'CLOZE') {
                       return null; // Don't render cloze definitions directly in list
