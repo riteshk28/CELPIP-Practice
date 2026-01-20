@@ -470,13 +470,14 @@ const SetEditor: React.FC<{
     const section = set.sections.find(s => s.id === sectionId);
     if (!section) return;
     
+    // Default timer for listening audio parts can be small, user can adjust
     const newPart = {
       id: `part-${Date.now()}`,
       sectionId,
-      timerSeconds: 600,
+      timerSeconds: section.type === 'LISTENING' ? 0 : 600, 
       contentText: '',
       questions: [],
-      instructions: section.type === 'LISTENING' ? 'Listen to the audio then answer the questions.' : 'Read the text and answer the questions.'
+      instructions: section.type === 'LISTENING' ? 'Listen to the audio clip.' : 'Read the text and answer the questions.'
     };
     
     const updatedSection = { ...section, parts: [...section.parts, newPart] };
@@ -578,8 +579,12 @@ const SetEditor: React.FC<{
               {/* Parts Editor */}
               <div className="space-y-6">
                 <div className="flex justify-between items-center border-b border-slate-200 pb-2">
-                   <h3 className="text-lg font-bold text-slate-800">Content Parts & Timers</h3>
-                   <Button size="sm" variant="secondary" onClick={() => addPart(activeSection.id)} disabled={isSaving}>+ Add Content</Button>
+                   <h3 className="text-lg font-bold text-slate-800">
+                     {activeSection.type === 'LISTENING' ? 'Listening Screens (Tasks)' : 'Content Parts & Timers'}
+                   </h3>
+                   <Button size="sm" variant="secondary" onClick={() => addPart(activeSection.id)} disabled={isSaving}>
+                     {activeSection.type === 'LISTENING' ? '+ Add Screen' : '+ Add Content'}
+                   </Button>
                 </div>
                 
                 {activeSection.parts.map((part, index) => (
@@ -622,6 +627,12 @@ const PartEditor: React.FC<{
   onDelete: () => void; 
 }> = ({ part, index, sectionType, onChange, onDelete }) => {
   const [timerMode, setTimerMode] = useState<'sec' | 'mmss'>('sec');
+  
+  // For Listening: Decide if this "Part" is currently acting as Audio Only or Questions
+  // Default to 'AUDIO' if audioData exists and no questions, otherwise 'QUESTIONS'
+  const [listeningScreenType, setListeningScreenType] = useState<'AUDIO' | 'QUESTIONS'>(
+    (sectionType === 'LISTENING' && !part.audioData && part.questions.length > 0) ? 'QUESTIONS' : 'AUDIO'
+  );
 
   const addItem = (type: QuestionType) => {
     const newItem = {
@@ -683,9 +694,6 @@ const PartEditor: React.FC<{
             newOptions[optIdx] = reader.result as string; // Store base64 image
             // If this option was correct, update answer
             let newCorrect = q.correctAnswer;
-            // Note: If we change the option value, we might break the correct answer reference if it's stored by value. 
-            // However, usually we select the correct answer *after* typing. 
-            // For now, if user uploads image, they should re-select correct answer.
             return { ...q, options: newOptions, correctAnswer: newCorrect === q.options[optIdx] ? reader.result : newCorrect };
         });
         onChange({ ...part, questions: newQs });
@@ -723,41 +731,46 @@ const PartEditor: React.FC<{
       {/* Header */}
       <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex justify-between items-center">
         <div className="flex items-center gap-2">
-           <span className="bg-white border border-slate-200 text-slate-500 text-xs font-bold px-2 py-0.5 rounded">PART {index + 1}</span>
+           <span className="bg-white border border-slate-200 text-slate-500 text-xs font-bold px-2 py-0.5 rounded">
+             {sectionType === 'LISTENING' ? 'SCREEN ' : 'PART '} {index + 1}
+           </span>
            <span className="text-xs text-slate-400">
-             {sectionType === 'READING' ? 'Passage & Questions' : sectionType === 'WRITING' ? 'Writing Prompt' : 'Audio Track & Questions'}
+             {sectionType === 'READING' ? 'Passage & Questions' : sectionType === 'WRITING' ? 'Writing Prompt' : 'Listening Task'}
            </span>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-md overflow-hidden shadow-sm">
-            <div className="bg-slate-100 px-2 py-1 border-r border-slate-200">
-               <span className="text-[10px] uppercase font-bold text-slate-500">Timer</span>
+          {/* Timer is relevant for Question Screens in Listening, or all screens in Reading/Writing */}
+          {(sectionType !== 'LISTENING' || listeningScreenType === 'QUESTIONS') && (
+            <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-md overflow-hidden shadow-sm">
+              <div className="bg-slate-100 px-2 py-1 border-r border-slate-200">
+                 <span className="text-[10px] uppercase font-bold text-slate-500">Timer</span>
+              </div>
+              <input 
+                type="text" 
+                className="w-16 text-sm font-bold text-slate-700 outline-none text-center bg-white" 
+                value={timerMode === 'sec' ? part.timerSeconds : formatMMSS(part.timerSeconds)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (timerMode === 'sec') {
+                    onChange({ ...part, timerSeconds: parseInt(val) || 0 });
+                  }
+                }}
+                onBlur={(e) => {
+                   if (timerMode === 'mmss') {
+                      onChange({ ...part, timerSeconds: parseMMSS(e.target.value) });
+                   }
+                }}
+                placeholder={timerMode === 'mmss' ? "MM:SS" : "Seconds"}
+              />
+              <button 
+                onClick={() => setTimerMode(m => m === 'sec' ? 'mmss' : 'sec')}
+                className="px-2 py-1 text-[10px] bg-slate-50 hover:bg-slate-100 border-l border-slate-200 text-slate-500 font-medium transition-colors"
+                title="Toggle format"
+              >
+                {timerMode === 'sec' ? 'sec' : 'm:s'}
+              </button>
             </div>
-            <input 
-              type="text" 
-              className="w-16 text-sm font-bold text-slate-700 outline-none text-center bg-white" 
-              value={timerMode === 'sec' ? part.timerSeconds : formatMMSS(part.timerSeconds)}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (timerMode === 'sec') {
-                  onChange({ ...part, timerSeconds: parseInt(val) || 0 });
-                }
-              }}
-              onBlur={(e) => {
-                 if (timerMode === 'mmss') {
-                    onChange({ ...part, timerSeconds: parseMMSS(e.target.value) });
-                 }
-              }}
-              placeholder={timerMode === 'mmss' ? "MM:SS" : "Seconds"}
-            />
-            <button 
-              onClick={() => setTimerMode(m => m === 'sec' ? 'mmss' : 'sec')}
-              className="px-2 py-1 text-[10px] bg-slate-50 hover:bg-slate-100 border-l border-slate-200 text-slate-500 font-medium transition-colors"
-              title="Toggle format"
-            >
-              {timerMode === 'sec' ? 'sec' : 'm:s'}
-            </button>
-          </div>
+          )}
           <button onClick={onDelete} className="text-slate-400 hover:text-red-500 text-xs flex items-center gap-1 transition-colors ml-2">
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
           </button>
@@ -766,55 +779,91 @@ const PartEditor: React.FC<{
       
       {/* Editor Body */}
       <div className="p-5 space-y-4">
+        {/* LISTENING SPECIFIC: Screen Type Selector */}
+        {sectionType === 'LISTENING' && (
+           <div className="flex gap-4 border-b border-slate-100 pb-4 mb-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                 <input 
+                    type="radio" 
+                    name={`screenType-${part.id}`} 
+                    checked={listeningScreenType === 'AUDIO'} 
+                    onChange={() => {
+                        setListeningScreenType('AUDIO');
+                        // Clear questions if switching to Audio mode to avoid confusion? 
+                        // No, let's keep data just in case, but hide UI.
+                        onChange({ ...part, timerSeconds: 0 }); // Usually no timer for listening part
+                    }}
+                    className="text-blue-600 focus:ring-blue-500"
+                 />
+                 <span className="text-sm font-bold text-slate-700">Audio Clip Screen</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                 <input 
+                    type="radio" 
+                    name={`screenType-${part.id}`} 
+                    checked={listeningScreenType === 'QUESTIONS'} 
+                    onChange={() => {
+                        setListeningScreenType('QUESTIONS');
+                        onChange({ ...part, audioData: undefined }); // Clear main audio if switching to Questions mode
+                    }}
+                    className="text-blue-600 focus:ring-blue-500"
+                 />
+                 <span className="text-sm font-bold text-slate-700">Question Set Screen</span>
+              </label>
+           </div>
+        )}
+
          <Input 
           label="Instructions for Student" 
           value={part.instructions} 
           onChange={e => onChange({ ...part, instructions: e.target.value })} 
-          placeholder="e.g. Read the following email..."
+          placeholder={sectionType === 'LISTENING' ? "e.g. Listen to the conversation..." : "e.g. Read the following email..."}
           className="text-sm bg-white text-slate-900"
         />
       
         {/* Split Columns */}
         <div className="grid grid-cols-2 gap-8 h-[600px]">
-           {/* LEFT COLUMN: Main Passage -> Image -> Audio */}
+           {/* LEFT COLUMN */}
            <div className="flex flex-col space-y-4 h-full overflow-hidden">
-              <div className="flex-1 flex flex-col min-h-0">
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                    {sectionType === 'LISTENING' ? 'Transcript / Context (Optional)' : 'Main Reading Passage'}
-                </label>
-                <RichTextEditor 
-                  className="w-full flex-1"
-                  value={part.contentText}
-                  onChange={val => onChange({ ...part, contentText: val })}
-                  placeholder={sectionType === 'LISTENING' ? "Paste transcript here (optional)..." : "Paste the main reading passage here..."}
-                />
-              </div>
+              {/* Only show Text Editor if NOT Listening (or if needed for Listening instructions context) */}
+              {sectionType !== 'LISTENING' && (
+                <div className="flex-1 flex flex-col min-h-0">
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Main Reading Passage</label>
+                    <RichTextEditor 
+                    className="w-full flex-1"
+                    value={part.contentText}
+                    onChange={val => onChange({ ...part, contentText: val })}
+                    placeholder="Paste the main reading passage here..."
+                    />
+                </div>
+              )}
 
-              {/* Listening Audio Upload */}
-              {sectionType === 'LISTENING' && (
-                  <div className="bg-amber-50 p-3 rounded-lg border border-amber-100 shrink-0">
-                    <div className="flex justify-between items-center mb-2">
-                        <label className="block text-xs font-bold text-amber-600 uppercase tracking-wider">Main Audio Track</label>
-                        {part.audioData && (
-                            <button 
-                            onClick={() => onChange({ ...part, audioData: undefined })}
-                            className="text-xs text-red-500 hover:text-red-700 font-medium"
-                            >
-                            Remove
-                            </button>
-                        )}
+              {/* Listening Audio Upload - Only for 'AUDIO' screens */}
+              {sectionType === 'LISTENING' && listeningScreenType === 'AUDIO' && (
+                  <div className="bg-amber-50 p-6 rounded-lg border border-amber-100 shrink-0 flex flex-col justify-center items-center h-64 border-dashed border-2 border-amber-200">
+                    <div className="mb-4 text-center">
+                        <label className="block text-sm font-bold text-amber-600 uppercase tracking-wider mb-1">Main Audio Track</label>
+                        <p className="text-xs text-slate-500">This will play automatically when the screen loads.</p>
                     </div>
+                    
                     {!part.audioData ? (
-                        <input type="file" accept="audio/*" onChange={handleAudioUpload} className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-amber-100 file:text-amber-700 hover:file:bg-amber-200"/>
+                        <input type="file" accept="audio/*" onChange={handleAudioUpload} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-amber-100 file:text-amber-700 hover:file:bg-amber-200 text-center"/>
                     ) : (
-                        <div className="w-full">
-                           <audio controls src={part.audioData} className="w-full h-8" />
+                        <div className="w-full max-w-xs text-center">
+                           <audio controls src={part.audioData} className="w-full h-10 mb-2" />
+                           <button 
+                            onClick={() => onChange({ ...part, audioData: undefined })}
+                            className="text-xs text-red-500 hover:text-red-700 font-bold underline"
+                            >
+                            Remove Audio
+                            </button>
                         </div>
                     )}
                   </div>
               )}
 
-              <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shrink-0">
+              {/* Optional Reference Image */}
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shrink-0 mt-auto">
                 <div className="flex justify-between items-center mb-2">
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Reference Image (Optional)</label>
                   {part.imageData && (
@@ -836,15 +885,16 @@ const PartEditor: React.FC<{
               </div>
            </div>
 
-           {/* RIGHT COLUMN: Flexible List */}
-           <div className="flex flex-col h-full overflow-hidden bg-slate-50 rounded-xl border border-slate-200 p-4">
-              {(sectionType === 'READING' || sectionType === 'LISTENING') ? (
+           {/* RIGHT COLUMN: Question List */}
+           <div className={`flex flex-col h-full overflow-hidden bg-slate-50 rounded-xl border border-slate-200 p-4 ${sectionType === 'LISTENING' && listeningScreenType === 'AUDIO' ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+              {/* Only enable questions if NOT Listening Audio Mode */}
+              {(sectionType === 'READING' || (sectionType === 'LISTENING' && listeningScreenType === 'QUESTIONS')) ? (
                 <>
                    {/* Item List */}
                    <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar mb-4">
                      {numberedQuestions.length === 0 && (
                         <div className="text-center py-8 text-slate-400 text-xs italic">
-                           Add Questions, Passages, or Cloze Definitions here.
+                           Add Questions here.
                         </div>
                      )}
                      {numberedQuestions.map((q: any, qIdx: number) => (
@@ -1032,7 +1082,9 @@ const PartEditor: React.FC<{
                 </>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-slate-400 text-xs text-center p-6 border-2 border-dashed border-slate-200 rounded-lg">
-                  <p>Writing tasks: User gets a text area.</p>
+                  <p>
+                    {sectionType === 'WRITING' ? 'Writing tasks: User gets a text area.' : 'Questions Disabled in Audio Mode'}
+                  </p>
                 </div>
               )}
            </div>
@@ -1217,38 +1269,33 @@ const TestRunner: React.FC<{
   const [timeLeft, setTimeLeft] = useState(0);
   const [writingInputs, setWritingInputs] = useState<Record<string, string>>({});
   const [showReview, setShowReview] = useState(false);
-  const [isListeningPhase, setIsListeningPhase] = useState(false);
-
+  
+  // Derived state to identify if current screen is "Audio Only" or "Question Set"
   const section = set.sections[currentSectionIndex];
   const part = section?.parts[currentPartIndex];
+  const isAudioScreen = section?.type === 'LISTENING' && part?.audioData && (!part.questions || part.questions.length === 0);
 
-  // Initialize timer and phase when part changes
+  // Initialize timer
   useEffect(() => {
     if (part) {
-      setTimeLeft(part.timerSeconds || 600);
-      // Logic for Listening sections: If there is audio, start in Listen Mode.
-      if (section.type === 'LISTENING' && part.audioData) {
-        setIsListeningPhase(true);
-      } else {
-        setIsListeningPhase(false);
-      }
+      setTimeLeft(part.timerSeconds || 0);
     }
-  }, [part, section?.type]);
+  }, [part]);
 
   useEffect(() => {
-    // Timer logic: Only count down if NOT in listening phase and NOT showing review
-    if (timeLeft <= 0 && !showReview && !isListeningPhase) {
-       // Logic to auto-advance if time runs out? 
-       // For now, let's just sit at 0 until user acts, or we could auto-advance.
+    // Timer logic: 
+    // If it's an Audio Screen, we generally pause timer or let audio duration dictate flow (infinite time).
+    // If it's a Question Screen, we countdown.
+    if (isAudioScreen || showReview || timeLeft <= 0) {
        return; 
     }
 
     let timer: any;
-    if (!isListeningPhase && !showReview && timeLeft > 0) {
+    if (timeLeft > 0) {
         timer = setInterval(() => setTimeLeft(prev => Math.max(0, prev - 1)), 1000);
     }
     return () => clearInterval(timer);
-  }, [timeLeft, part, showReview, isListeningPhase]);
+  }, [timeLeft, showReview, isAudioScreen]);
 
   const formatTime = (sec: number) => {
     const m = Math.floor(sec / 60);
@@ -1257,15 +1304,13 @@ const TestRunner: React.FC<{
   };
 
   const handleNext = () => {
-    // If in listening phase, we can't skip typically, but for dev/testing maybe we allow?
-    // User requirement: "Once the recording finishes, the user is moved...". 
-    // We'll treat the Next button as "Skip Audio" if in listening phase, or "Submit" if in answering phase.
-    
-    if (isListeningPhase) {
-        if (confirm("Skip audio and start answering?")) {
-            setIsListeningPhase(false);
+    // If on Audio screen, Next acts as "Skip Audio" or "Continue" if done.
+    if (isAudioScreen) {
+        if (confirm("Skip audio and continue?")) {
+            // just proceed
+        } else {
+            return;
         }
-        return;
     }
 
     // Check if we are at the end of the section (Reading OR Listening) to show review
@@ -1325,7 +1370,10 @@ const TestRunner: React.FC<{
   };
 
   // Logic to calculate numbering for displayed questions (skipping Passages)
-  // We need to calculate this once upfront so numbers are consistent
+  // We need to calculate this once upfront so numbers are consistent across the whole SECTION
+  // However, in this view, we only render questions for the CURRENT PART. 
+  // IMPORTANT: For Listening, questions are split across parts. We should probably number them 1..N per part, or global?
+  // Let's stick to Part-based numbering for now as it's simpler.
   let questionCounter = 0;
   const numberedQuestions = part ? part.questions.map((q: any) => {
      if (q.type !== 'PASSAGE') {
@@ -1359,36 +1407,37 @@ const TestRunner: React.FC<{
           <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
              <span>{section.title}</span>
              <span>•</span>
-             <span className="text-blue-400">Part {currentPartIndex + 1} of {section.parts.length}</span>
+             <span className="text-blue-400">Screen {currentPartIndex + 1} of {section.parts.length}</span>
           </div>
         </div>
         <div className="flex items-center gap-6">
-           <div className={`text-xl font-mono font-bold bg-slate-800 px-3 py-1 rounded ${timeLeft < 60 && !isListeningPhase ? 'text-red-400 animate-pulse' : 'text-emerald-400'}`}>
-             {isListeningPhase ? 'AUDIO PLAYING' : formatTime(timeLeft)}
+           <div className={`text-xl font-mono font-bold bg-slate-800 px-3 py-1 rounded ${timeLeft < 60 && !isAudioScreen ? 'text-red-400 animate-pulse' : 'text-emerald-400'}`}>
+             {isAudioScreen ? 'AUDIO PLAYING' : formatTime(timeLeft)}
            </div>
            <Button variant="danger" size="sm" onClick={onExit} className="opacity-80 hover:opacity-100">Exit Test</Button>
            <Button variant="primary" onClick={handleNext} className="bg-blue-600 hover:bg-blue-500 font-bold px-6">
-             {isListeningPhase ? 'Skip Audio' : 
-              (currentSectionIndex === set.sections.length - 1 && currentPartIndex === section.parts.length - 1 ? 'Finish Test' : 'Next Part →')}
+             {isAudioScreen ? 'Skip Audio' : 
+              (currentSectionIndex === set.sections.length - 1 && currentPartIndex === section.parts.length - 1 ? 'Finish Test' : 'Next Screen →')}
            </Button>
         </div>
       </header>
 
-      {/* VIEW: LISTENING PHASE (Audio Only) */}
-      {isListeningPhase && (
+      {/* VIEW: AUDIO SCREEN (Listening Phase) */}
+      {isAudioScreen && (
           <div className="flex-1 flex flex-col items-center justify-center bg-slate-100 p-8 text-center animate-in fade-in duration-500">
              <div className="max-w-2xl w-full bg-white p-12 rounded-2xl shadow-xl border border-slate-200">
                 <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
                     <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
                 </div>
                 <h2 className="text-2xl font-bold text-slate-900 mb-2">Listen to the recording</h2>
-                <p className="text-slate-500 mb-8">The test timer is paused while the audio is playing. Questions will appear automatically when the audio finishes.</p>
+                <p className="text-slate-500 mb-8">{part.instructions || "The test timer is paused while the audio is playing."}</p>
                 
                 {part.audioData && (
                     <div className="max-w-md mx-auto">
                         <StrictAudioPlayer 
                             src={part.audioData} 
-                            onEnded={() => setIsListeningPhase(false)} 
+                            // Auto-advance is optional, maybe too jarring. Let user click Next.
+                            // onEnded={() => {}} 
                         />
                     </div>
                 )}
@@ -1396,10 +1445,10 @@ const TestRunner: React.FC<{
           </div>
       )}
 
-      {/* VIEW: ANSWERING PHASE (Split Screen) */}
-      {!isListeningPhase && (
+      {/* VIEW: QUESTION / CONTENT SCREEN */}
+      {!isAudioScreen && (
         <div className="flex-1 flex overflow-hidden animate-in fade-in duration-300">
-            {/* Left Pane: Instructions -> Audio/Text -> Image */}
+            {/* Left Pane: Instructions -> Text -> Image */}
             <div className="w-1/2 p-8 overflow-y-auto border-r border-slate-200 bg-slate-50 scroll-smooth">
             <div className="mb-8">
                 {part.instructions && (
@@ -1409,10 +1458,10 @@ const TestRunner: React.FC<{
                     </div>
                 )}
                 
-                {/* Main Audio Placeholder (Disabled) */}
-                {section.type === 'LISTENING' && part.audioData && (
-                    <div className="mb-6 opacity-70">
-                        <StrictAudioPlayer src={part.audioData} disabled={true} autoPlay={false} />
+                {/* For Listening Question Screens, we show a "Audio Completed" placeholder if user wants context */}
+                {section.type === 'LISTENING' && (
+                    <div className="mb-6 opacity-70 border border-slate-300 rounded-lg p-4 bg-slate-200 text-center text-slate-500 text-xs font-bold uppercase tracking-wider">
+                       Audio Recording Completed
                     </div>
                 )}
 
