@@ -53,6 +53,91 @@ const Modal: React.FC<{
   );
 };
 
+// Strict Audio Player for Test Takers (Play Once, No Seek)
+const StrictAudioPlayer: React.FC<{
+  src: string;
+  onEnded?: () => void;
+  autoPlay?: boolean;
+}> = ({ src, onEnded, autoPlay = true }) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [hasEnded, setHasEnded] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleTimeUpdate = () => {
+      if (audio.duration) {
+        setProgress((audio.currentTime / audio.duration) * 100);
+      }
+    };
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+      setHasEnded(true);
+      if (onEnded) onEnded();
+    };
+
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
+
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('play', handlePlay);
+    audio.addEventListener('pause', handlePause);
+
+    // Initial autoplay
+    if (autoPlay && !hasEnded) {
+      audio.play().catch(e => console.log("Autoplay prevented:", e));
+    }
+
+    return () => {
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('play', handlePlay);
+      audio.removeEventListener('pause', handlePause);
+    };
+  }, [src, autoPlay, hasEnded, onEnded]);
+
+  return (
+    <div className="bg-slate-800 p-4 rounded-lg shadow-md border border-slate-700">
+      <audio ref={audioRef} src={src} className="hidden" />
+      
+      <div className="flex items-center gap-4 mb-3">
+        {/* Status Icon */}
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isPlaying ? 'bg-blue-500 animate-pulse' : 'bg-slate-600'}`}>
+          {isPlaying ? (
+            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+          ) : hasEnded ? (
+            <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+          ) : (
+             <svg className="w-5 h-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /></svg>
+          )}
+        </div>
+        
+        <div className="flex-1">
+          <div className="text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
+             {isPlaying ? 'Playing Audio...' : hasEnded ? 'Audio Completed' : 'Ready to Play'}
+          </div>
+          {/* Progress Bar (Non-interactive) */}
+          <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+             <div 
+               className={`h-full transition-all duration-300 ease-linear ${hasEnded ? 'bg-green-500' : 'bg-blue-500'}`} 
+               style={{ width: `${progress}%` }}
+             ></div>
+          </div>
+        </div>
+      </div>
+
+      <div className="text-[10px] text-slate-500 text-center italic">
+         Audio plays once automatically. Controls are disabled during test.
+      </div>
+    </div>
+  );
+};
+
 const RichTextEditor: React.FC<{
   value: string;
   onChange: (val: string) => void;
@@ -64,13 +149,9 @@ const RichTextEditor: React.FC<{
   // Initialize content
   useEffect(() => {
     if (contentEditableRef.current && contentEditableRef.current.innerHTML !== value) {
-       // Only update if significantly different to avoid cursor jumps, 
-       // but for this simple implementation, we assume external updates are rare while editing.
-       // We use a simple check to handle the initial load.
        if (contentEditableRef.current.innerHTML === '' && value) {
            contentEditableRef.current.innerHTML = value;
        } else if (value !== contentEditableRef.current.innerHTML) {
-           // If the value changed externally (e.g. switching questions), update it
            contentEditableRef.current.innerHTML = value;
        }
     }
@@ -356,7 +437,7 @@ const SetEditor: React.FC<{
 }> = ({ set, onChange, onSave, onCancel, isSaving }) => {
   const [activeSectionId, setActiveSectionId] = useState<string | null>(set.sections[0]?.id || null);
 
-  const addSection = (type: 'READING' | 'WRITING') => {
+  const addSection = (type: 'READING' | 'WRITING' | 'LISTENING') => {
     const newSection = {
       id: `sec-${Date.now()}`,
       setId: set.id,
@@ -443,6 +524,9 @@ const SetEditor: React.FC<{
                </button>
                <button onClick={() => addSection('WRITING')} disabled={isSaving} className="flex flex-col items-center justify-center p-2 text-xs bg-white border border-slate-200 rounded hover:border-green-400 hover:text-green-600 transition-colors shadow-sm disabled:opacity-50">
                   <span className="font-bold">+ Writing</span>
+               </button>
+               <button onClick={() => addSection('LISTENING')} disabled={isSaving} className="flex flex-col items-center justify-center p-2 text-xs bg-white border border-slate-200 rounded hover:border-amber-400 hover:text-amber-600 transition-colors shadow-sm disabled:opacity-50">
+                  <span className="font-bold">+ Listening</span>
                </button>
             </div>
           </div>
@@ -557,6 +641,31 @@ const PartEditor: React.FC<{
     }
   };
 
+  const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        onChange({ ...part, audioData: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleQuestionAudioUpload = (qId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const newQs = part.questions.map((q: any) => 
+            q.id === qId ? { ...q, audioData: reader.result as string } : q
+        );
+        onChange({ ...part, questions: newQs });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const formatMMSS = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -588,7 +697,7 @@ const PartEditor: React.FC<{
         <div className="flex items-center gap-2">
            <span className="bg-white border border-slate-200 text-slate-500 text-xs font-bold px-2 py-0.5 rounded">PART {index + 1}</span>
            <span className="text-xs text-slate-400">
-             {sectionType === 'READING' ? 'Passage & Questions' : 'Writing Prompt'}
+             {sectionType === 'READING' ? 'Passage & Questions' : sectionType === 'WRITING' ? 'Writing Prompt' : 'Audio Track & Questions'}
            </span>
         </div>
         <div className="flex items-center gap-3">
@@ -639,17 +748,43 @@ const PartEditor: React.FC<{
       
         {/* Split Columns */}
         <div className="grid grid-cols-2 gap-8 h-[600px]">
-           {/* LEFT COLUMN: Main Passage -> Image */}
+           {/* LEFT COLUMN: Main Passage -> Image -> Audio */}
            <div className="flex flex-col space-y-4 h-full overflow-hidden">
               <div className="flex-1 flex flex-col min-h-0">
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Main Reading Passage</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    {sectionType === 'LISTENING' ? 'Transcript / Context (Optional)' : 'Main Reading Passage'}
+                </label>
                 <RichTextEditor 
                   className="w-full flex-1"
                   value={part.contentText}
                   onChange={val => onChange({ ...part, contentText: val })}
-                  placeholder="Paste the main reading passage here..."
+                  placeholder={sectionType === 'LISTENING' ? "Paste transcript here (optional)..." : "Paste the main reading passage here..."}
                 />
               </div>
+
+              {/* Listening Audio Upload */}
+              {sectionType === 'LISTENING' && (
+                  <div className="bg-amber-50 p-3 rounded-lg border border-amber-100 shrink-0">
+                    <div className="flex justify-between items-center mb-2">
+                        <label className="block text-xs font-bold text-amber-600 uppercase tracking-wider">Main Audio Track</label>
+                        {part.audioData && (
+                            <button 
+                            onClick={() => onChange({ ...part, audioData: undefined })}
+                            className="text-xs text-red-500 hover:text-red-700 font-medium"
+                            >
+                            Remove
+                            </button>
+                        )}
+                    </div>
+                    {!part.audioData ? (
+                        <input type="file" accept="audio/*" onChange={handleAudioUpload} className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-amber-100 file:text-amber-700 hover:file:bg-amber-200"/>
+                    ) : (
+                        <div className="w-full">
+                           <audio controls src={part.audioData} className="w-full h-8" />
+                        </div>
+                    )}
+                  </div>
+              )}
 
               <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shrink-0">
                 <div className="flex justify-between items-center mb-2">
@@ -675,7 +810,7 @@ const PartEditor: React.FC<{
 
            {/* RIGHT COLUMN: Flexible List */}
            <div className="flex flex-col h-full overflow-hidden bg-slate-50 rounded-xl border border-slate-200 p-4">
-              {sectionType === 'READING' ? (
+              {(sectionType === 'READING' || sectionType === 'LISTENING') ? (
                 <>
                    {/* Item List */}
                    <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar mb-4">
@@ -744,9 +879,29 @@ const PartEditor: React.FC<{
                           {/* MCQ TYPE */}
                           {q.type === 'MCQ' && (
                             <div className="mb-2">
+                              {/* Audio Upload for specific question */}
+                              {sectionType === 'LISTENING' && (
+                                  <div className="mb-2">
+                                      <div className="flex items-center gap-2 mb-1">
+                                         <label className="text-[10px] font-bold text-slate-400 uppercase">Spoken Question (Optional)</label>
+                                         {q.audioData && (
+                                             <button onClick={() => {
+                                                 const newQs = [...part.questions];
+                                                 newQs[qIdx].audioData = undefined;
+                                                 onChange({ ...part, questions: newQs });
+                                             }} className="text-[10px] text-red-500 hover:underline">Remove</button>
+                                         )}
+                                      </div>
+                                      {!q.audioData ? (
+                                          <input type="file" accept="audio/*" onChange={(e) => handleQuestionAudioUpload(q.id, e)} className="text-[10px] w-full text-slate-500" />
+                                      ) : (
+                                          <audio controls src={q.audioData} className="h-6 w-full" />
+                                      )}
+                                  </div>
+                              )}
                               <input 
                                 className="w-full border border-slate-300 rounded px-2 py-1.5 text-xs bg-white text-slate-900 focus:ring-1 focus:ring-blue-500 mb-2"
-                                placeholder="Question Text"
+                                placeholder="Question Text (can be empty if audio is provided)"
                                 value={q.text}
                                 onChange={e => {
                                   const newQs = [...part.questions];
@@ -1028,9 +1183,9 @@ const TestRunner: React.FC<{
   };
 
   const handleNext = () => {
-    // Check if we are at the end of the Reading section to show review
+    // Check if we are at the end of the section (Reading OR Listening) to show review
     const isLastPart = currentPartIndex === section.parts.length - 1;
-    if (isLastPart && section.type === 'READING' && !showReview) {
+    if (isLastPart && (section.type === 'READING' || section.type === 'LISTENING') && !showReview) {
         setShowReview(true);
         return;
     }
@@ -1061,7 +1216,7 @@ const TestRunner: React.FC<{
     let correctQuestions = 0;
 
     set.sections.forEach(sec => {
-      if (sec.type === 'READING') {
+      if (sec.type === 'READING' || sec.type === 'LISTENING') {
         let secScore = 0;
         sec.parts.forEach(p => {
           p.questions.forEach(q => {
@@ -1097,6 +1252,7 @@ const TestRunner: React.FC<{
 
   // Helper to safely render plain text or HTML content for the main left pane
   const renderMainContent = (content: string) => {
+      if (!content) return null;
       // Simple heuristic: if it contains HTML tags, render as HTML.
       // Otherwise render as text with line breaks converted.
       if (content.includes('<') && content.includes('>')) {
@@ -1136,7 +1292,7 @@ const TestRunner: React.FC<{
 
       {/* Split Pane Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Pane: Instructions -> Text -> Image */}
+        {/* Left Pane: Instructions -> Audio/Text -> Image */}
         <div className="w-1/2 p-8 overflow-y-auto border-r border-slate-200 bg-slate-50 scroll-smooth">
            <div className="mb-8">
              {part.instructions && (
@@ -1146,6 +1302,13 @@ const TestRunner: React.FC<{
                  </div>
              )}
              
+             {/* Main Audio for Listening */}
+             {section.type === 'LISTENING' && part.audioData && (
+                 <div className="mb-6">
+                     <StrictAudioPlayer src={part.audioData} />
+                 </div>
+             )}
+
              <div className="mb-6">
                 {renderMainContent(part.contentText)}
              </div>
@@ -1158,7 +1321,7 @@ const TestRunner: React.FC<{
 
         {/* Right Pane: Questions (MCQ) and Passages */}
         <div className="w-1/2 p-8 overflow-y-auto bg-white scroll-smooth relative">
-           {section.type === 'READING' ? (
+           {(section.type === 'READING' || section.type === 'LISTENING') ? (
              <div className="space-y-6 pb-12">
                 {numberedQuestions.map((q: any) => {
                    if (q.type === 'PASSAGE') {
@@ -1181,7 +1344,15 @@ const TestRunner: React.FC<{
                       <div key={q.id} className="p-5 rounded-xl border border-slate-100 hover:border-blue-200 transition-all shadow-sm hover:shadow-md bg-white group">
                         <div className="font-semibold text-slate-900 mb-4 flex gap-3 items-start">
                           <span className="bg-slate-800 text-white w-7 h-7 rounded flex items-center justify-center text-sm font-bold shrink-0 mt-0.5">{q.displayNum}</span>
-                          <span className="mt-0.5">{q.text}</span>
+                          <div className="flex-1">
+                             {/* Specific Question Audio */}
+                             {q.audioData && (
+                                 <div className="mb-2">
+                                     <StrictAudioPlayer src={q.audioData} autoPlay={false} />
+                                 </div>
+                             )}
+                             <span className="mt-0.5">{q.text}</span>
+                          </div>
                         </div>
                         <div className="space-y-2 ml-10">
                             {q.options?.map((opt: string, oIdx: number) => (

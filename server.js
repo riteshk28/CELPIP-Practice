@@ -82,6 +82,7 @@ app.get('/api/sets', async (req, res) => {
                 'sectionId', p.section_id,
                 'contentText', p.content_text,
                 'imageData', p.image_data,
+                'audioData', p.audio_data,
                 'instructions', p.instructions,
                 'timerSeconds', COALESCE(p.timer_seconds, 600),
                 'questions', COALESCE((
@@ -92,7 +93,8 @@ app.get('/api/sets', async (req, res) => {
                     'type', q.type,
                     'options', q.options,
                     'correctAnswer', q.correct_answer,
-                    'weight', q.weight
+                    'weight', q.weight,
+                    'audioData', q.audio_data
                   ) ORDER BY q.order_index ASC) FROM questions q WHERE q.part_id = p.id
                 ), '[]'::json)
               ) ORDER BY p.order_index ASC) FROM parts p WHERE p.section_id = sec.id
@@ -134,15 +136,15 @@ app.post('/api/sets', async (req, res) => {
       let partOrder = 0;
       for (const part of sec.parts) {
         await client.query(
-          'INSERT INTO parts (id, section_id, content_text, image_data, instructions, timer_seconds, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-          [part.id, sec.id, part.contentText, part.imageData, part.instructions, part.timerSeconds, partOrder++]
+          'INSERT INTO parts (id, section_id, content_text, image_data, audio_data, instructions, timer_seconds, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+          [part.id, sec.id, part.contentText, part.imageData, part.audioData, part.instructions, part.timerSeconds, partOrder++]
         );
 
         let qOrder = 0;
         for (const q of part.questions) {
           await client.query(
-            'INSERT INTO questions (id, part_id, question_text, type, options, correct_answer, weight, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-            [q.id, part.id, q.text, q.type, JSON.stringify(q.options || []), q.correctAnswer, q.weight, qOrder++]
+            'INSERT INTO questions (id, part_id, question_text, type, options, correct_answer, weight, audio_data, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+            [q.id, part.id, q.text, q.type, JSON.stringify(q.options || []), q.correctAnswer, q.weight, q.audioData, qOrder++]
           );
         }
       }

@@ -19,13 +19,15 @@ export interface Question {
   options?: string[]; // For MCQ/Cloze
   correctAnswer?: string; // For auto-grading
   weight: number;
+  audioData?: string; // Base64 audio for spoken questions
 }
 
 export interface Part {
   id: string;
   sectionId: string;
-  contentText: string; // Main Passage (Left Side)
+  contentText: string; // Main Passage (Left Side) or Transcript
   imageData?: string; // Base64
+  audioData?: string; // Base64 audio for Listening parts
   instructions?: string;
   questions: Question[]; // Now contains MCQs, CLOZE definitions, AND PASSAGE blocks mixed
   timerSeconds: number; // Duration for this specific part

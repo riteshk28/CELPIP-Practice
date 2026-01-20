@@ -82,6 +82,7 @@ app.get('/api/sets', async (req, res) => {
                 'sectionId', p.section_id,
                 'contentText', p.content_text,
                 'imageData', p.image_data,
+                'audioData', p.audio_data,
                 'instructions', p.instructions,
                 'timerSeconds', COALESCE(p.timer_seconds, 600),
                 'questions', COALESCE((
@@ -92,7 +93,8 @@ app.get('/api/sets', async (req, res) => {
                     'type', q.type,
                     'options', q.options,
                     'correctAnswer', q.correct_answer,
-                    'weight', q.weight
+                    'weight', q.weight,
+                    'audioData', q.audio_data
                   ) ORDER BY q.order_index ASC) FROM questions q WHERE q.part_id = p.id
                 ), '[]'::json)
               ) ORDER BY p.order_index ASC) FROM parts p WHERE p.section_id = sec.id
@@ -116,7 +118,7 @@ app.post('/api/sets', async (req, res) => {
   
   try {
     await client.query('BEGIN');
-    // Using simple replace strategy
+    
     await client.query('DELETE FROM practice_sets WHERE id = $1', [set.id]);
     
     await client.query(
@@ -134,15 +136,15 @@ app.post('/api/sets', async (req, res) => {
       let partOrder = 0;
       for (const part of sec.parts) {
         await client.query(
-          'INSERT INTO parts (id, section_id, content_text, image_data, instructions, timer_seconds, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-          [part.id, sec.id, part.contentText, part.imageData, part.instructions, part.timerSeconds, partOrder++]
+          'INSERT INTO parts (id, section_id, content_text, image_data, audio_data, instructions, timer_seconds, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+          [part.id, sec.id, part.contentText, part.imageData, part.audioData, part.instructions, part.timerSeconds, partOrder++]
         );
 
         let qOrder = 0;
         for (const q of part.questions) {
           await client.query(
-            'INSERT INTO questions (id, part_id, question_text, type, options, correct_answer, weight, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-            [q.id, part.id, q.text, q.type, JSON.stringify(q.options || []), q.correctAnswer, q.weight, qOrder++]
+            'INSERT INTO questions (id, part_id, question_text, type, options, correct_answer, weight, audio_data, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+            [q.id, part.id, q.text, q.type, JSON.stringify(q.options || []), q.correctAnswer, q.weight, q.audioData, qOrder++]
           );
         }
       }
@@ -173,8 +175,6 @@ app.delete('/api/sets/:id', async (req, res) => {
 app.post('/api/attempts', async (req, res) => {
   const att = req.body;
   try {
-    // Note: 'att.setTitle' is sent from frontend but not stored in user_attempts in this schema.
-    // It will be retrieved via JOIN in GET request.
     await pool.query(
       'INSERT INTO user_attempts (id, user_id, set_id, section_scores, total_band_score, completed_at) VALUES ($1, $2, $3, $4, $5, $6)',
       [att.id, att.userId, att.setId, JSON.stringify(att.sectionScores), att.bandScore, new Date()]
@@ -188,7 +188,6 @@ app.post('/api/attempts', async (req, res) => {
 // 7. GET ATTEMPTS
 app.get('/api/attempts/:userId', async (req, res) => {
   try {
-    // JOIN to get the set title
     const query = `
       SELECT ua.*, ps.title as set_title 
       FROM user_attempts ua 
