@@ -735,7 +735,7 @@ const ClozeRenderer: React.FC<{
         const match = part.match(/\[\[(\d+)\]\]/);
         if (match) {
            const qIndex = parseInt(match[1]);
-           const question = questions.find(q => q.text === String(qIndex)); 
+           const question = questions.find(q => q.type === 'CLOZE' && q.text === String(qIndex)); 
            
            if (question && question.options) {
              return (
@@ -823,13 +823,13 @@ const PartEditor: React.FC<{
       update({ segments: part.segments?.filter(s => s.id !== segId) });
   };
 
-  const addQuestion = () => {
+  const addItem = (type: QuestionType) => {
     const newQ: Question = {
       id: `q-${Date.now()}`,
       partId: part.id,
-      text: '',
-      type: 'MCQ',
-      options: ['', '', '', ''],
+      text: type === 'CLOZE' ? '1' : '',
+      type,
+      options: type === 'PASSAGE' ? undefined : ['', '', '', ''],
       correctAnswer: '',
       weight: 1
     };
@@ -842,6 +842,22 @@ const PartEditor: React.FC<{
 
   const deleteQuestion = (qId: string) => {
       update({ questions: part.questions.filter(q => q.id !== qId) });
+  };
+
+  const addOption = (qId: string) => {
+      const q = part.questions.find(x => x.id === qId);
+      if(q && q.options) {
+          updateQuestion(qId, { options: [...q.options, ''] });
+      }
+  };
+  
+  const removeOption = (qId: string, idx: number) => {
+       const q = part.questions.find(x => x.id === qId);
+       if(q && q.options) {
+           const newOpts = [...q.options];
+           newOpts.splice(idx, 1);
+           updateQuestion(qId, { options: newOpts });
+       }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -862,7 +878,7 @@ const PartEditor: React.FC<{
           <div className="flex items-center gap-3">
              <div className={`transform transition-transform ${expanded ? 'rotate-90' : ''}`}>▶</div>
              <h4 className="font-bold text-slate-700">Part {index + 1}</h4>
-             <span className="text-xs text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">{isSegmented ? `${part.segments?.length || 0} Segments` : `${part.questions.length} Questions`}</span>
+             <span className="text-xs text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">{isSegmented ? `${part.segments?.length || 0} Segments` : `${part.questions.length} Items`}</span>
           </div>
           <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="text-red-500 hover:text-red-700 text-sm font-medium">Delete Part</button>
        </div>
@@ -883,11 +899,13 @@ const PartEditor: React.FC<{
                 />
             </div>
 
+            {/* Main Content Area - Optional if user prefers item-based Passages */}
             <div>
-               <label className="block text-sm font-medium text-slate-700 mb-1">Context / Reading Text</label>
+               <label className="block text-sm font-medium text-slate-700 mb-1">Main Context / Reading Text (Optional)</label>
                <RichTextEditor 
                   value={part.contentText || ''} 
                   onChange={val => update({ contentText: val })} 
+                  placeholder="Paste main reading passage here (if not using Passage items)..."
                />
             </div>
 
@@ -923,46 +941,87 @@ const PartEditor: React.FC<{
             ) : (
                 <div className="space-y-4 border-t border-slate-100 pt-4">
                     <div className="flex justify-between items-center">
-                        <h5 className="font-bold text-slate-800">Questions</h5>
-                        <Button size="sm" onClick={addQuestion}>+ Add Question</Button>
+                        <h5 className="font-bold text-slate-800">Questions & Passages</h5>
+                        <div className="flex gap-2">
+                           <Button size="sm" onClick={() => addItem('PASSAGE')}>+ Passage</Button>
+                           <Button size="sm" onClick={() => addItem('MCQ')}>+ MCQ</Button>
+                           <Button size="sm" onClick={() => addItem('CLOZE')}>+ Cloze</Button>
+                        </div>
                     </div>
                     {part.questions.map((q, i) => (
-                         <div key={q.id} className="border border-slate-200 rounded p-4 bg-slate-50">
+                         <div key={q.id} className="border border-slate-200 rounded p-4 bg-slate-50 relative group">
                              <div className="flex justify-between mb-2">
-                                 <span className="font-bold text-xs text-slate-500">Q{i+1}</span>
+                                 <div className="flex items-center gap-2">
+                                    <span className="font-bold text-xs text-white bg-slate-400 px-2 py-0.5 rounded">{q.type}</span>
+                                    {q.type !== 'PASSAGE' && <span className="font-bold text-xs text-slate-500">Item {i+1}</span>}
+                                 </div>
                                  <button onClick={() => deleteQuestion(q.id)} className="text-red-500 text-xs hover:underline">Remove</button>
                              </div>
-                             <div className="grid gap-2">
-                                <Input 
-                                   placeholder="Question Text" 
-                                   value={q.text} 
-                                   onChange={e => updateQuestion(q.id, { text: e.target.value })} 
-                                />
-                                <div className="grid grid-cols-2 gap-2">
-                                    {q.options?.map((opt, oi) => (
-                                        <div key={oi} className="flex items-center gap-1">
-                                            <input 
-                                                type="radio" 
-                                                checked={q.correctAnswer === opt && opt !== ''} 
-                                                onChange={() => updateQuestion(q.id, { correctAnswer: opt })} 
-                                            />
-                                            <input 
-                                                className="flex-1 border rounded px-2 py-1 text-xs"
-                                                value={opt}
-                                                onChange={e => {
-                                                    const newOpts = [...(q.options||[])];
-                                                    newOpts[oi] = e.target.value;
-                                                    let nc = q.correctAnswer;
-                                                    if(nc === opt) nc = e.target.value;
-                                                    updateQuestion(q.id, { options: newOpts, correctAnswer: nc });
-                                                }}
-                                            />
-                                        </div>
-                                    ))}
-                                </div>
-                             </div>
+
+                             {q.type === 'PASSAGE' && (
+                                 <RichTextEditor 
+                                    value={q.text} 
+                                    onChange={val => updateQuestion(q.id, { text: val })}
+                                    placeholder="Enter passage text... Use [[1]] for cloze gaps." 
+                                 />
+                             )}
+
+                             {q.type === 'CLOZE' && (
+                                 <div className="grid gap-2">
+                                     <div className="flex items-center gap-2">
+                                         <label className="text-xs font-bold text-slate-600">Gap ID:</label>
+                                         <input 
+                                             className="w-16 border rounded px-2 py-1 text-sm font-bold text-center"
+                                             value={q.text}
+                                             onChange={e => updateQuestion(q.id, { text: e.target.value })}
+                                             placeholder="1"
+                                         />
+                                         <span className="text-xs text-slate-400">Matches [[1]] in passage</span>
+                                     </div>
+                                     {/* Options for Cloze are handled same as MCQ below */}
+                                 </div>
+                             )}
+
+                             {(q.type === 'MCQ' || q.type === 'CLOZE') && (
+                                 <div className="space-y-2 mt-2">
+                                     {q.type === 'MCQ' && (
+                                         <Input 
+                                            placeholder="Question Text" 
+                                            value={q.text} 
+                                            onChange={e => updateQuestion(q.id, { text: e.target.value })} 
+                                         />
+                                     )}
+                                     <div className="space-y-2 pl-4 border-l-2 border-slate-200">
+                                        {q.options?.map((opt, oi) => (
+                                            <div key={oi} className="flex items-center gap-2">
+                                                <input 
+                                                    type="radio" 
+                                                    checked={q.correctAnswer === opt && opt !== ''} 
+                                                    onChange={() => updateQuestion(q.id, { correctAnswer: opt })} 
+                                                    title="Mark as correct answer"
+                                                />
+                                                <input 
+                                                    className="flex-1 border rounded px-2 py-1 text-sm"
+                                                    value={opt}
+                                                    placeholder={`Option ${oi + 1}`}
+                                                    onChange={e => {
+                                                        const newOpts = [...(q.options||[])];
+                                                        newOpts[oi] = e.target.value;
+                                                        let nc = q.correctAnswer;
+                                                        if(nc === opt) nc = e.target.value;
+                                                        updateQuestion(q.id, { options: newOpts, correctAnswer: nc });
+                                                    }}
+                                                />
+                                                <button onClick={() => removeOption(q.id, oi)} className="text-slate-400 hover:text-red-500 font-bold px-1">&times;</button>
+                                            </div>
+                                        ))}
+                                        <button onClick={() => addOption(q.id)} className="text-xs text-blue-600 hover:underline font-medium">+ Add Option</button>
+                                     </div>
+                                 </div>
+                             )}
                          </div>
                     ))}
+                    {part.questions.length === 0 && <p className="text-center text-slate-400 text-sm italic py-4">No content items added yet.</p>}
                 </div>
             )}
          </div>
@@ -1137,22 +1196,59 @@ const TestRunner: React.FC<{
                  </div>
              ) : currentPart ? (
                  <div className="flex h-full flex-col md:flex-row">
-                     {/* Check for CLOZE questions */}
-                     {currentPart.questions.some(q => q.type === 'CLOZE') ? (
+                     {/* Check for mixed content questions (Passage/Cloze/MCQ) */}
+                     {/* If any PASSAGE type exists in questions, we treat it as a mixed flow, otherwise standard split */}
+                     {currentPart.questions.some(q => q.type === 'PASSAGE') || currentPart.questions.some(q => q.type === 'CLOZE' && !currentPart.questions.some(x => x.type === 'MCQ')) ? (
                          <div className="w-full p-8 overflow-y-auto">
-                            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Complete the text</h3>
-                            <div className="prose prose-lg max-w-none bg-white p-6 rounded-lg border border-slate-200 shadow-sm">
-                                <ClozeRenderer 
-                                    text={currentPart.contentText || ''} 
-                                    questions={currentPart.questions} 
-                                    answers={answers} 
-                                    onAnswer={(qId, val) => setAnswers(prev => ({ ...prev, [qId]: val }))} 
-                                />
+                            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Reading / Cloze Task</h3>
+                            {/* Render Main Context if it exists */}
+                            {currentPart.contentText && (
+                                <div className="prose prose-lg max-w-none bg-white p-6 rounded-lg border border-slate-200 shadow-sm mb-6">
+                                    <div dangerouslySetInnerHTML={{ __html: currentPart.contentText }} />
+                                </div>
+                            )}
+
+                            <div className="space-y-6">
+                                {currentPart.questions.map(q => {
+                                    if (q.type === 'PASSAGE') {
+                                        return (
+                                            <div key={q.id} className="prose prose-lg max-w-none bg-white p-6 rounded-lg border border-slate-200 shadow-sm">
+                                                <ClozeRenderer 
+                                                    text={q.text} 
+                                                    questions={currentPart.questions} 
+                                                    answers={answers} 
+                                                    onAnswer={(qId, val) => setAnswers(prev => ({ ...prev, [qId]: val }))} 
+                                                />
+                                            </div>
+                                        );
+                                    } else if (q.type === 'MCQ') {
+                                        return (
+                                            <div key={q.id} className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
+                                                <p className="font-bold text-slate-800 mb-3">{q.text}</p>
+                                                <div className="space-y-2">
+                                                    {q.options?.map((opt, i) => (
+                                                        <label key={i} className="flex items-center gap-3 cursor-pointer p-2 hover:bg-slate-50 rounded border border-transparent hover:border-slate-100 transition-colors">
+                                                            <input 
+                                                                type="radio" 
+                                                                name={q.id} 
+                                                                checked={answers[q.id] === opt}
+                                                                onChange={() => setAnswers({...answers, [q.id]: opt})}
+                                                                className="w-4 h-4 text-blue-600"
+                                                            />
+                                                            <span className="text-sm text-slate-700">{opt}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                    return null; // Cloze definitions are rendered by ClozeRenderer via the Passage
+                                })}
                             </div>
                          </div>
                      ) : (
                         <>
-                             {/* Standard Split View */}
+                             {/* Standard Split View for pure MCQs with one Context */}
                              <div className="w-full md:w-1/2 p-8 border-r border-slate-100 overflow-y-auto max-h-[80vh]">
                                  <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Reading Text</h3>
                                  {currentPart.imageData && (
@@ -1203,6 +1299,7 @@ const TestRunner: React.FC<{
   );
 };
 
+// ... (Rest of UserDashboard and App remain the same)
 // RESTORED USER DASHBOARD
 const UserDashboard: React.FC<{ user: User; onLogout: () => void; onStartTest: (set: PracticeSet) => void }> = ({ user, onLogout, onStartTest }) => {
   const [sets, setSets] = useState<PracticeSet[]>([]);
