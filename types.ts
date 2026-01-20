@@ -14,15 +14,18 @@ export type QuestionType = 'MCQ' | 'CLOZE' | 'PASSAGE';
 export interface Question {
   id: string;
   partId: string;
-  segmentId?: string; // NEW: For questions belonging to a specific segment (Listening)
+  segmentId?: string; // For questions belonging to a specific segment (Listening)
   text: string; 
   type: QuestionType;
   options?: string[]; 
   correctAnswer?: string; 
   weight: number;
+  // NEW: Advanced Listening Features
+  audioData?: string; // Base64 audio for the question itself (e.g. "Listen to the question")
+  timerSeconds?: number; // Specific timer for this question (0 = use segment timer)
 }
 
-// NEW: A Segment is a sub-unit of a Part (e.g., one audio track + questions)
+// A Segment is a sub-unit of a Part (e.g., one audio track + questions)
 export interface Segment {
   id: string;
   partId: string;
@@ -42,8 +45,8 @@ export interface Part {
   instructions?: string;
   // Reading/Writing use 'questions' directly. Listening uses 'segments'.
   questions: Question[]; 
-  segments?: Segment[]; // NEW: Container for Listening segments
-  prepTimeSeconds?: number; // NEW: Specific for Speaking Parts
+  segments?: Segment[]; // Container for Listening segments
+  prepTimeSeconds?: number; // Specific for Speaking Parts
   timerSeconds: number; 
 }
 

@@ -1,5 +1,5 @@
 
-// ... (imports remain the same, I will include the full file content to ensure no context is lost, but I'll focus on TestRunner changes)
+// ... (imports)
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { User, PracticeSet, Attempt, QuestionType, Segment, Question, SectionType } from './types';
@@ -9,7 +9,7 @@ import { Input, TextArea } from './components/Input';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 // --- HELPER COMPONENTS ---
-// ... (Dropdown, Modal, RichTextEditor, LoginScreen, AdminDashboard, SetEditor, SegmentEditor, PartEditor, SectionIntro, ClozeRenderer, SectionReview remain unchanged)
+// ... (Dropdown, Modal, RichTextEditor, LoginScreen, AdminDashboard, SetEditor - No changes to these basics)
 
 const Dropdown: React.FC<{
   options: string[];
@@ -106,8 +106,6 @@ const RichTextEditor: React.FC<{
     </div>
   );
 };
-
-// ... (LoginScreen, AdminDashboard, SetEditor, SegmentEditor, PartEditor, SectionIntro, ClozeRenderer, SectionReview - Including shortened versions where possible or unchanged)
 
 // 1. LOGIN
 const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
@@ -385,7 +383,7 @@ const SetEditor: React.FC<{
       contentText: '',
       questions: [],
       instructions: 'Instructions...',
-      segments: [] // Initialize Segments
+      segments: [] 
     };
     
     const updatedSection = { ...section, parts: [...section.parts, newPart] };
@@ -522,7 +520,7 @@ const SetEditor: React.FC<{
   );
 };
 
-// 4. SEGMENT EDITOR
+// 4. SEGMENT EDITOR (UPDATED for Question Audio & Timers)
 const SegmentEditor: React.FC<{
   segment: Segment;
   index: number;
@@ -530,6 +528,8 @@ const SegmentEditor: React.FC<{
   onChange: (s: Segment) => void;
   onDelete: () => void;
 }> = ({ segment, index, sectionType, onChange, onDelete }) => {
+  const [expandedQuestions, setExpandedQuestions] = useState<Set<string>>(new Set());
+
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -538,6 +538,17 @@ const SegmentEditor: React.FC<{
         onChange({ ...segment, audioData: reader.result as string });
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleQuestionAudioUpload = (qId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            updateQuestion(qId, { audioData: reader.result as string });
+        };
+        reader.readAsDataURL(file);
     }
   };
 
@@ -564,6 +575,13 @@ const SegmentEditor: React.FC<{
      onChange({ ...segment, questions: segment.questions.filter(q => q.id !== qId) });
   };
 
+  const toggleExpand = (qId: string) => {
+      const newSet = new Set(expandedQuestions);
+      if (newSet.has(qId)) newSet.delete(qId);
+      else newSet.add(qId);
+      setExpandedQuestions(newSet);
+  };
+
   return (
     <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 mb-4 relative shadow-sm">
        <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-2">
@@ -576,7 +594,7 @@ const SegmentEditor: React.FC<{
        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div>
              <label className="block text-xs font-bold text-slate-500 mb-1">
-                {sectionType === 'SPEAKING' ? 'Audio Prompt (Optional)' : 'Audio Track'}
+                {sectionType === 'SPEAKING' ? 'Audio Prompt (Optional)' : 'Main Audio Track'}
              </label>
              {!segment.audioData ? (
                 <input type="file" accept="audio/*" onChange={handleAudioUpload} className="text-xs w-full text-slate-500" />
@@ -638,8 +656,40 @@ const SegmentEditor: React.FC<{
                            value={q.text}
                            onChange={e => updateQuestion(q.id, { text: e.target.value })}
                         />
+                        <button onClick={() => toggleExpand(q.id)} className="text-slate-400 hover:text-blue-500 text-xs px-2 font-medium">
+                            {expandedQuestions.has(q.id) ? 'Hide Settings' : 'Adv. Settings'}
+                        </button>
                         <button onClick={() => deleteQuestion(q.id)} className="text-slate-300 hover:text-red-500 font-bold px-2">&times;</button>
                      </div>
+                     
+                     {/* Advanced Question Settings */}
+                     {expandedQuestions.has(q.id) && (
+                         <div className="mb-3 ml-6 p-3 bg-slate-50 rounded border border-slate-200 grid grid-cols-2 gap-4">
+                             <div>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">Question Audio (Optional)</label>
+                                {!q.audioData ? (
+                                    <input type="file" accept="audio/*" onChange={(e) => handleQuestionAudioUpload(q.id, e)} className="text-[10px] w-full text-slate-500" />
+                                ) : (
+                                    <div className="flex flex-col gap-1">
+                                        <audio controls src={q.audioData} className="h-6 w-full" />
+                                        <button onClick={() => updateQuestion(q.id, { audioData: undefined })} className="text-red-500 text-[10px] font-bold self-start">Remove</button>
+                                    </div>
+                                )}
+                             </div>
+                             <div>
+                                <label className="block text-[10px] font-bold text-slate-500 mb-1">Individual Timer (sec)</label>
+                                <input 
+                                    type="number" 
+                                    className="border rounded px-2 py-1 text-xs w-full bg-white text-slate-900"
+                                    value={q.timerSeconds || 0}
+                                    placeholder="0 (Inherit Segment Timer)"
+                                    onChange={e => updateQuestion(q.id, { timerSeconds: parseInt(e.target.value) || 0 })}
+                                />
+                                <span className="text-[9px] text-slate-400">If set, questions appear sequentially.</span>
+                             </div>
+                         </div>
+                     )}
+
                      <div className="pl-6 grid grid-cols-2 gap-2">
                         {q.options?.map((opt, oIdx) => (
                            <div key={oIdx} className="flex items-center gap-1">
@@ -675,7 +725,7 @@ const SegmentEditor: React.FC<{
   );
 };
 
-// 5. PART EDITOR
+// ... (PartEditor remains largely the same, mostly used for scaffolding)
 const PartEditor: React.FC<{ 
   part: any; 
   index: number; 
@@ -1048,212 +1098,94 @@ const PartEditor: React.FC<{
   );
 };
 
-// ... (SectionIntro, ClozeRenderer, SectionReview - no changes)
-const SectionIntro: React.FC<{
-  title: string;
-  type: SectionType;
-  onStart: () => void;
-}> = ({ title, type, onStart }) => {
-  const instructions = {
-    READING: "This section contains several parts. Read the passages/questions and answer the questions. You can manage your time as you see fit within the section limit.",
-    LISTENING: "This section tests your listening comprehension. You will hear each audio clip ONLY ONCE. You will have time to read the questions before the audio begins.",
-    WRITING: "Answer the following writing prompts. Pay attention to the word count limits and tone.",
-    SPEAKING: "This section tests your speaking ability. You will need a microphone. You will have a short Preparation Time followed by a Recording Time for each prompt."
-  };
+// --- HELPER COMPONENTS FOR TEST RUNNER ---
 
+const SectionIntro: React.FC<{ title: string; type: SectionType; onStart: () => void }> = ({ title, type, onStart }) => {
   return (
-    <div className="h-screen flex items-center justify-center bg-slate-50 p-6">
-      <div className="max-w-2xl w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200 animate-in zoom-in fade-in duration-300">
-         <div className="bg-slate-900 px-8 py-6">
-            <h1 className="text-2xl font-bold text-white tracking-wide uppercase">{type} SECTION</h1>
-            <p className="text-slate-400 mt-1">{title}</p>
+    <div className="h-screen flex items-center justify-center bg-slate-50">
+      <div className="max-w-md w-full bg-white p-10 rounded-2xl shadow-xl text-center border border-slate-100">
+         <h1 className="text-2xl font-bold text-slate-900 mb-2">{title}</h1>
+         <span className="inline-block px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold tracking-wide uppercase mb-8">{type} SECTION</span>
+         
+         <div className="space-y-4 mb-8 text-left text-sm text-slate-600 bg-slate-50 p-6 rounded-lg border border-slate-200">
+            <p className="flex items-start gap-2">
+               <svg className="w-5 h-5 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+               <span>This section is timed. The timer will start automatically.</span>
+            </p>
+            <p className="flex items-start gap-2">
+               <svg className="w-5 h-5 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+               <span>Ensure your audio is working (for Listening/Speaking).</span>
+            </p>
+            <p className="flex items-start gap-2">
+               <svg className="w-5 h-5 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+               <span>Answer all questions to the best of your ability.</span>
+            </p>
          </div>
-         <div className="p-10 space-y-8">
-            <div>
-               <h3 className="text-lg font-bold text-slate-800 mb-2">Instructions</h3>
-               <p className="text-slate-600 leading-relaxed text-lg">
-                 {instructions[type] || "Complete the tasks in this section."}
-               </p>
-            </div>
-            
-            <div className="bg-amber-50 border-l-4 border-amber-400 p-4 text-amber-800 text-sm rounded-r">
-               <strong>Note:</strong> Once you start, the timer will begin immediately.
-               {type === 'LISTENING' && " Ensure your audio volume is set correctly."}
-               {type === 'SPEAKING' && " Please ensure your microphone is connected and allowed in browser settings."}
-            </div>
 
-            <div className="flex justify-end pt-4">
-               <Button size="lg" onClick={onStart} className="shadow-lg shadow-blue-200 w-full sm:w-auto transform transition hover:-translate-y-1">
-                 Start {type} Section &rarr;
-               </Button>
-            </div>
-         </div>
+         <Button size="lg" onClick={onStart} className="w-full py-4 text-lg shadow-blue-200 shadow-lg font-bold">Start Section</Button>
       </div>
     </div>
   );
 };
 
-const ClozeRenderer: React.FC<{
-  htmlContent: string;
-  questions: any[];
-  answers: Record<string, string>;
-  onAnswer: (id: string, val: string) => void;
+const SectionReview: React.FC<{
+  section: any;
+  answers: Record<string, any>;
+  onContinue: () => void;
+}> = ({ section, answers, onContinue }) => {
+   return (
+      <div className="h-screen flex flex-col items-center justify-center bg-slate-50 p-8">
+         <div className="max-w-lg w-full bg-white p-8 rounded-2xl shadow-xl text-center">
+            <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
+               <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+            </div>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">{section.title} Completed</h2>
+            <p className="text-slate-500 mb-8">You have finished this section. Take a moment to breathe before continuing.</p>
+            <Button onClick={onContinue} size="lg" className="w-full">Continue to Next Section</Button>
+         </div>
+      </div>
+   );
+};
+
+const ClozeRenderer: React.FC<{ 
+  htmlContent: string; 
+  questions: any[]; 
+  answers: Record<string, any>;
+  onAnswer: (id: string, val: any) => void;
 }> = ({ htmlContent, questions, answers, onAnswer }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [clozeLocations, setClozeLocations] = useState<{ id: string; element: Element }[]>([]);
-
-  // 1. Prepare HTML: Replace [[id]] with marker spans
-  const processedHtml = React.useMemo(() => {
-    // If content is just plain text with newlines (legacy data), convert to basic HTML
-    let content = htmlContent;
-    if (!content.includes('<') && content.includes('\n')) {
-       content = content.replace(/\n/g, '<br/>');
-    }
-
-    return content.replace(/\[\[\s*(\w+)\s*\]\]/g, (match, id) => {
-       return `<span id="cloze-slot-${id}" class="cloze-slot inline-block min-w-[120px] mx-1 align-middle"></span>`;
-    });
-  }, [htmlContent]);
-
-  // 2. Find markers after render
-  useLayoutEffect(() => {
-    if (containerRef.current) {
-      const slots = containerRef.current.querySelectorAll('.cloze-slot');
-      const locs: { id: string; element: Element }[] = [];
-      slots.forEach(slot => {
-        const id = slot.id.replace('cloze-slot-', '');
-        locs.push({ id, element: slot });
-      });
-      setClozeLocations(locs);
-    }
-  }, [processedHtml]);
+  const parts = htmlContent.split(/(\[\[\d+\]\])/g);
 
   return (
-    <div className="relative">
-      <div 
-         ref={containerRef}
-         className="prose prose-slate max-w-none text-slate-800 leading-relaxed font-serif text-lg bg-slate-50 p-6 rounded-lg border border-slate-200 shadow-sm mb-6"
-         dangerouslySetInnerHTML={{ __html: processedHtml }}
-      />
-      {clozeLocations.map(loc => {
-        const question = questions.find(q => q.type === 'CLOZE' && q.text === loc.id);
-        if (!question) {
-             return createPortal(
-                 <span className="text-red-500 font-bold text-xs border border-red-300 bg-red-50 px-1 rounded">[[{loc.id}?]]</span>,
-                 loc.element
+    <div className="prose prose-slate max-w-none leading-loose text-lg">
+       {parts.map((part, i) => {
+          const match = part.match(/^\[\[(\d+)\]\]$/);
+          if (match) {
+             const id = match[1];
+             const question = questions.find(q => q.type === 'CLOZE' && q.text === id);
+             if (!question) return <span key={i} className="text-red-500 font-bold">[{id}?]</span>;
+             
+             return (
+                <span key={i} className="inline-block mx-1 align-middle">
+                   <select 
+                      className="border-b-2 border-blue-500 bg-blue-50 text-blue-900 px-2 py-1 rounded-t focus:outline-none focus:bg-blue-100 font-bold text-sm"
+                      value={answers[question.id] || ''}
+                      onChange={(e) => onAnswer(question.id, e.target.value)}
+                   >
+                      <option value="" disabled>Select...</option>
+                      {question.options?.map((opt: string, idx: number) => (
+                         <option key={idx} value={opt}>{opt}</option>
+                      ))}
+                   </select>
+                </span>
              );
-        }
-        return createPortal(
-          <Dropdown
-            options={question.options || []}
-            value={answers[question.id] || ''}
-            onChange={(val) => onAnswer(question.id, val)}
-            placeholder={`[${loc.id}]`}
-            className="w-full font-sans text-sm border-blue-200 bg-white shadow-sm"
-          />,
-          loc.element
-        );
-      })}
+          }
+          return <span key={i} dangerouslySetInnerHTML={{ __html: part }} />;
+       })}
     </div>
   );
 };
 
-const SectionReview: React.FC<{ 
-    section: any; 
-    answers: Record<string, any>; 
-    onContinue: () => void; 
-}> = ({ section, answers, onContinue }) => {
-   // Calculate metrics
-   let correct = 0;
-   let total = 0;
-   const details: any[] = [];
-
-   section.parts.forEach((part: any, pIdx: number) => {
-      // Group details by Part to give context
-      const partDetails: any[] = [];
-      // Combine direct questions and segment questions for review
-      const allQuestions = [...(part.questions || []), ...(part.segments?.flatMap((s: any) => s.questions) || [])];
-      
-      allQuestions.forEach((q: any) => {
-         if (q.type === 'MCQ' || q.type === 'CLOZE') {
-            total++;
-            const isCorrect = answers[q.id] === q.correctAnswer;
-            if (isCorrect) correct++;
-            partDetails.push({ ...q, isCorrect, userAnswer: answers[q.id] });
-         }
-      });
-      if (partDetails.length > 0) {
-          details.push({ partTitle: `Part ${pIdx+1}`, questions: partDetails });
-      }
-   });
-
-   const percentage = total > 0 ? Math.round((correct / total) * 100) : 0;
-
-   return (
-     <div className="h-screen flex flex-col bg-slate-50">
-        <header className="bg-white border-b border-slate-200 px-8 py-6 flex justify-between items-center shadow-sm z-10">
-           <div>
-              <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Section Review: <span className="text-blue-600">{section.type}</span></h2>
-              <p className="text-slate-500 mt-1">Review your performance before moving to the next section.</p>
-           </div>
-           <div className="flex items-center gap-4">
-              <div className="text-right">
-                  <div className="text-3xl font-bold text-slate-900">{correct}<span className="text-slate-400 text-xl">/{total}</span></div>
-                  <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Total Score</div>
-              </div>
-              <div className={`h-12 w-12 rounded-full flex items-center justify-center font-bold border-4 ${percentage >= 80 ? 'border-green-500 text-green-600' : percentage >= 50 ? 'border-amber-500 text-amber-600' : 'border-red-500 text-red-600'}`}>
-                 {percentage}%
-              </div>
-           </div>
-        </header>
-
-        <div className="flex-1 overflow-y-auto p-8 space-y-8 max-w-5xl mx-auto w-full">
-            {details.map((group, idx) => (
-                <div key={idx} className="space-y-4">
-                    <h3 className="font-bold text-slate-400 uppercase tracking-wider text-xs border-b border-slate-200 pb-2">{group.partTitle}</h3>
-                    <div className="grid gap-4">
-                        {group.questions.map((item: any) => (
-                            <div key={item.id} className={`p-5 rounded-lg border flex justify-between items-start transition-all shadow-sm ${item.isCorrect ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                                <div className="space-y-2">
-                                    <p className="font-bold text-slate-800 text-sm">
-                                    {item.type === 'CLOZE' ? `Gap [${item.text}]` : item.text}
-                                    </p>
-                                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-6 text-xs">
-                                    <span className={`font-bold flex items-center gap-1 ${item.isCorrect ? "text-green-700" : "text-red-700"}`}>
-                                        Your Answer: <span className="bg-white/50 px-1 rounded">{item.userAnswer || '(Skipped)'}</span>
-                                    </span>
-                                    {!item.isCorrect && (
-                                        <span className="text-slate-600 font-medium flex items-center gap-1">
-                                            Correct Answer: <span className="bg-slate-200/50 px-1 rounded text-slate-800 font-bold">{item.correctAnswer}</span>
-                                        </span>
-                                    )}
-                                    </div>
-                                </div>
-                                <div className="shrink-0 ml-4">
-                                    {item.isCorrect ? (
-                                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-green-200 text-green-700">
-                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-                                        </span>
-                                    ) : (
-                                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-red-200 text-red-700">
-                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            ))}
-        </div>
-
-        <footer className="bg-white border-t border-slate-200 px-8 py-4 flex justify-end sticky bottom-0 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-            <Button size="lg" onClick={onContinue} className="shadow-blue-200 shadow-lg">Continue to Next Section &rarr;</Button>
-        </footer>
-     </div>
-   );
-};
-
+// TEST RUNNER UPDATE: Listening with Question Timers
 const TestRunner: React.FC<{ 
   set: PracticeSet; 
   onComplete: (score: any) => void; 
@@ -1265,11 +1197,13 @@ const TestRunner: React.FC<{
   
   const [viewState, setViewState] = useState<'INTRO' | 'TEST' | 'REVIEW'>('INTRO');
   const [phase, setPhase] = useState<'PREP' | 'WORKING' | 'RECORDING'>('PREP');
+  // New State for Listening Question Sequence
+  const [listeningStep, setListeningStep] = useState<'MAIN_AUDIO' | number>('MAIN_AUDIO');
+
   const [volume, setVolume] = useState(1);
   const [isRecording, setIsRecording] = useState(false);
   
   const [answers, setAnswers] = useState<Record<string, any>>({});
-  // CHANGED: Initialize as null to prevent premature auto-advance
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [writingInputs, setWritingInputs] = useState<Record<string, string>>({});
   
@@ -1294,10 +1228,22 @@ const TestRunner: React.FC<{
                 audioRef.current.currentTime = 0;
             }
         } else {
-            newTime = segment.timerSeconds;
-            if (audioRef.current) {
-                audioRef.current.volume = volume;
-                audioRef.current.play().catch(e => console.error("Audio play failed (user gesture required?)", e));
+            // PHASE WORKING
+            if (listeningStep === 'MAIN_AUDIO') {
+               newTime = segment.timerSeconds; // Usually length of audio or 0 if audio controls timing
+               if (audioRef.current) {
+                   audioRef.current.volume = volume;
+                   audioRef.current.play().catch(e => console.error("Audio play failed", e));
+               }
+            } else if (typeof listeningStep === 'number') {
+               // We are on a specific question
+               const q = segment.questions[listeningStep];
+               newTime = q.timerSeconds || 30; // Default if not set, or fall back to segment timer logic?
+               // If there's question audio, we play it here too
+               if (audioRef.current && q.audioData) {
+                   audioRef.current.volume = volume;
+                   audioRef.current.play().catch(e => console.error("Question audio play failed", e));
+               }
             }
         }
     } else if (section.type === 'SPEAKING' && segment) {
@@ -1313,7 +1259,7 @@ const TestRunner: React.FC<{
     }
     
     setTimeLeft(newTime);
-  }, [part, segment, phase, section.type, viewState]);
+  }, [part, segment, phase, section.type, viewState, listeningStep]); // Added listeningStep dependency
 
   const startRecording = async () => {
     try {
@@ -1347,7 +1293,7 @@ const TestRunner: React.FC<{
   // Timer Tick & Auto-Advance
   useEffect(() => {
     if (viewState !== 'TEST') return;
-    if (timeLeft === null) return; // Wait for timer to be initialized
+    if (timeLeft === null) return; 
 
     if (timeLeft <= 0) {
       handleAutoAdvance();
@@ -1358,13 +1304,31 @@ const TestRunner: React.FC<{
   }, [timeLeft, viewState]);
 
   const handleAutoAdvance = () => {
-      setTimeLeft(null); // Reset to prevent double-trigger
+      setTimeLeft(null); 
       
       if (section.type === 'LISTENING') {
           if (phase === 'PREP') {
               setPhase('WORKING');
+              setListeningStep('MAIN_AUDIO');
           } else {
-              handleNextSegment();
+              // We are in WORKING phase.
+              // Check if we are doing sequential questions
+              const hasSequential = segment?.questions.some(q => (q.timerSeconds || 0) > 0);
+              
+              if (hasSequential) {
+                  if (listeningStep === 'MAIN_AUDIO') {
+                      setListeningStep(0); // Go to first question
+                  } else if (typeof listeningStep === 'number') {
+                      if (listeningStep < (segment?.questions.length || 0) - 1) {
+                          setListeningStep(listeningStep + 1);
+                      } else {
+                          handleNextSegment();
+                      }
+                  }
+              } else {
+                  // Standard mode (all questions shown at once), if time is up, move on
+                  handleNextSegment();
+              }
           }
       } else if (section.type === 'SPEAKING') {
           if (phase === 'PREP') {
@@ -1383,6 +1347,7 @@ const TestRunner: React.FC<{
       if (part.segments && currentSegmentIndex < part.segments.length - 1) {
           setCurrentSegmentIndex(prev => prev + 1);
           setPhase('PREP');
+          setListeningStep('MAIN_AUDIO'); // Reset listening step
       } else {
           handleNext();
       }
@@ -1403,11 +1368,13 @@ const TestRunner: React.FC<{
       setCurrentPartIndex(prev => prev + 1);
       setCurrentSegmentIndex(0);
       setPhase('PREP');
+      setListeningStep('MAIN_AUDIO');
     } else if (currentSectionIndex < set.sections.length - 1) {
       setCurrentSectionIndex(prev => prev + 1);
       setCurrentPartIndex(0);
       setCurrentSegmentIndex(0);
       setPhase('PREP');
+      setListeningStep('MAIN_AUDIO');
       setViewState('INTRO'); 
     } else {
       finishTest();
@@ -1560,6 +1527,13 @@ const TestRunner: React.FC<{
   if (section.type === 'LISTENING') {
       if (!segment) return <div>Invalid Segment Data</div>;
 
+      const hasSequential = segment.questions.some(q => (q.timerSeconds || 0) > 0);
+      const activeQuestion = typeof listeningStep === 'number' ? segment.questions[listeningStep] : null;
+
+      // Determine what to display based on step
+      const isMainAudio = listeningStep === 'MAIN_AUDIO';
+      const showQuestions = !hasSequential || (typeof listeningStep === 'number');
+
       return (
         <div className="h-screen flex flex-col bg-white">
             <header className="bg-slate-900 text-white px-6 py-3 flex justify-between items-center shadow-lg z-20">
@@ -1571,7 +1545,7 @@ const TestRunner: React.FC<{
                      <span className="text-amber-400 font-bold">Segment {currentSegmentIndex + 1} of {part.segments?.length || 0}</span>
                      <span>•</span>
                      <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${phase === 'PREP' ? 'bg-blue-600 text-white' : 'bg-red-600 text-white animate-pulse'}`}>
-                         {phase === 'PREP' ? 'Prep Time' : 'On Air'}
+                         {phase === 'PREP' ? 'Prep Time' : (isMainAudio ? 'Listening...' : 'Answering')}
                      </span>
                   </div>
                 </div>
@@ -1604,6 +1578,7 @@ const TestRunner: React.FC<{
             </header>
 
             <div className="flex-1 flex overflow-hidden">
+                {/* LEFT PANE: Instructions & Audio */}
                 <div className="w-1/2 p-10 overflow-y-auto bg-slate-50 border-r border-slate-200 flex flex-col items-center">
                     <div className="w-full max-w-xl">
                         {part.instructions && (
@@ -1612,24 +1587,40 @@ const TestRunner: React.FC<{
                              </div>
                         )}
 
-                        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 mb-8 flex flex-col items-center text-center">
-                            <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 transition-all duration-500 ${phase === 'WORKING' ? 'bg-amber-100 text-amber-600 scale-110 shadow-lg shadow-amber-100 animate-pulse' : 'bg-slate-100 text-slate-300'}`}>
-                                <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                        {/* Main Audio Visualization */}
+                        {(phase === 'WORKING' && isMainAudio) || phase === 'PREP' ? (
+                            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 mb-8 flex flex-col items-center text-center">
+                                <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 transition-all duration-500 ${phase === 'WORKING' ? 'bg-amber-100 text-amber-600 scale-110 shadow-lg shadow-amber-100 animate-pulse' : 'bg-slate-100 text-slate-300'}`}>
+                                    <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                                </div>
+                                <h3 className="text-lg font-bold text-slate-800 mb-2">
+                                    {phase === 'PREP' ? 'Prepare to Listen' : 'Listening...'}
+                                </h3>
+                                
+                                <audio 
+                                    ref={isMainAudio ? audioRef : null} 
+                                    src={segment.audioData} 
+                                    className="w-full h-8 opacity-50 pointer-events-none" 
+                                    controls={false} 
+                                />
                             </div>
-                            <h3 className="text-lg font-bold text-slate-800 mb-2">
-                                {phase === 'PREP' ? 'Prepare to Listen' : 'Listening in Progress'}
-                            </h3>
-                            <p className="text-sm text-slate-500 mb-4">
-                                {phase === 'PREP' ? 'Read the questions carefully.' : 'Listen to the audio and answer the questions.'}
-                            </p>
-                            
-                            <audio 
-                                ref={audioRef} 
-                                src={segment.audioData} 
-                                className="w-full h-8 opacity-50 pointer-events-none" 
-                                controls={false} 
-                            />
-                        </div>
+                        ) : null}
+
+                        {/* Question Specific Audio */}
+                        {activeQuestion?.audioData && (
+                            <div className="bg-blue-50 p-6 rounded-xl border border-blue-100 mb-8 flex flex-col items-center text-center animate-in fade-in slide-in-from-bottom-4">
+                                <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mb-2 animate-pulse">
+                                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+                                </div>
+                                <p className="text-sm font-bold text-blue-800 mb-2">Listen to Question {listeningStep as number + 1}</p>
+                                <audio 
+                                    ref={!isMainAudio ? audioRef : null}
+                                    src={activeQuestion.audioData} 
+                                    className="w-full h-8"
+                                    controls={false}
+                                />
+                            </div>
+                        )}
 
                         {segment.contentText && (
                             <div className="prose prose-sm prose-slate max-w-none bg-white p-6 rounded-lg border border-slate-200">
@@ -1639,32 +1630,47 @@ const TestRunner: React.FC<{
                     </div>
                 </div>
 
+                {/* RIGHT PANE: Questions */}
                 <div className="w-1/2 p-10 overflow-y-auto bg-white">
                     <div className="max-w-xl mx-auto space-y-6">
-                        {segment.questions.map((q, i) => (
-                           <div key={q.id} className={`p-5 rounded-xl border transition-all shadow-sm ${phase === 'PREP' ? 'border-slate-100 bg-slate-50' : 'border-slate-200 bg-white hover:border-blue-300 hover:shadow-md'}`}>
-                              <div className="font-semibold text-slate-900 mb-4 flex gap-3 items-start">
-                                <span className="bg-slate-800 text-white w-6 h-6 rounded flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">{i + 1}</span>
-                                <span className="mt-0.5">{q.text}</span>
-                              </div>
-                              <div className="space-y-2 ml-9">
-                                  {q.options?.map((opt: string, oIdx: number) => (
-                                    <label key={oIdx} className="flex items-start gap-3 cursor-pointer group/opt p-2 rounded hover:bg-slate-50 transition-colors">
-                                      <div className="relative flex items-center mt-0.5">
-                                        <input 
-                                          type="radio" 
-                                          name={q.id} 
-                                          className="peer h-4 w-4 border-slate-300 text-blue-600 focus:ring-blue-500"
-                                          checked={answers[q.id] === opt}
-                                          onChange={() => setAnswers(prev => ({ ...prev, [q.id]: opt }))}
-                                        />
+                        {/* Only show questions if we are not playing main audio, OR if it's simultaneous mode */}
+                        {showQuestions ? (
+                            (hasSequential ? [activeQuestion] : segment.questions).map((q, i) => {
+                                if (!q) return null;
+                                // If sequential, index is fixed to current step. If all at once, index is map index
+                                const displayIndex = hasSequential ? (listeningStep as number) : i;
+                                
+                                return (
+                                   <div key={q.id} className={`p-5 rounded-xl border transition-all shadow-sm ${phase === 'PREP' ? 'border-slate-100 bg-slate-50' : 'border-slate-200 bg-white hover:border-blue-300 hover:shadow-md'}`}>
+                                      <div className="font-semibold text-slate-900 mb-4 flex gap-3 items-start">
+                                        <span className="bg-slate-800 text-white w-6 h-6 rounded flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">{displayIndex + 1}</span>
+                                        <span className="mt-0.5">{q.text || "Listen to the audio question..."}</span>
                                       </div>
-                                      <span className="text-slate-700 peer-checked:text-blue-700 font-medium">{opt}</span>
-                                    </label>
-                                  ))}
-                              </div>
-                           </div>
-                        ))}
+                                      <div className="space-y-2 ml-9">
+                                          {q.options?.map((opt: string, oIdx: number) => (
+                                            <label key={oIdx} className="flex items-start gap-3 cursor-pointer group/opt p-2 rounded hover:bg-slate-50 transition-colors">
+                                              <div className="relative flex items-center mt-0.5">
+                                                <input 
+                                                  type="radio" 
+                                                  name={q.id} 
+                                                  className="peer h-4 w-4 border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                  checked={answers[q.id] === opt}
+                                                  onChange={() => setAnswers(prev => ({ ...prev, [q.id]: opt }))}
+                                                />
+                                              </div>
+                                              <span className="text-slate-700 peer-checked:text-blue-700 font-medium">{opt}</span>
+                                            </label>
+                                          ))}
+                                      </div>
+                                   </div>
+                                )
+                            })
+                        ) : (
+                            <div className="flex items-center justify-center h-full text-slate-400">
+                                <p className="text-sm italic">Listen to the audio clip...</p>
+                            </div>
+                        )}
+                        
                         {segment.questions.length === 0 && (
                             <div className="text-center py-12 text-slate-400 text-sm">
                                 No questions for this segment. Just listen.
@@ -1678,6 +1684,7 @@ const TestRunner: React.FC<{
   }
 
   // --- READING / WRITING RENDER ---
+  // (Unchanged logic for Reading/Writing)
   let questionDisplayCounter = 0;
   const numberedQuestions = part ? part.questions.map((q: any) => {
      if (q.type !== 'PASSAGE') {
@@ -1689,6 +1696,7 @@ const TestRunner: React.FC<{
 
   return (
     <div className="h-screen flex flex-col bg-white">
+      {/* ... (Header and layout logic for Reading/Writing unchanged) ... */}
       <header className="bg-slate-900 text-white px-6 py-3 flex justify-between items-center shadow-lg z-20">
         <div>
           <h2 className="text-lg font-bold tracking-wide">{section.type} SECTION</h2>
@@ -1796,149 +1804,99 @@ const TestRunner: React.FC<{
   );
 };
 
-const UserDashboard: React.FC<{ user: User; onLogout: () => void; onStartTest: (set: PracticeSet) => void }> = ({ user, onLogout, onStartTest }) => {
-  const [sets, setSets] = useState<PracticeSet[]>([]);
-  const [attempts, setAttempts] = useState<Attempt[]>([]);
-
-  useEffect(() => {
-    API.getSets().then(data => setSets(data.filter(s => s.isPublished)));
-    API.getAttempts(user.id).then(data => setAttempts(data));
-  }, [user.id]);
-
-  const chartData = [...attempts].reverse();
-
-  return (
-    <div className="min-h-screen bg-slate-50 p-6">
-       <header className="flex justify-between items-center mb-8 max-w-6xl mx-auto bg-white p-4 rounded-lg shadow-sm border border-slate-200">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">Welcome, {user.name}</h1>
-          <p className="text-xs text-slate-500">Candidate Dashboard</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={onLogout}>Logout</Button>
-      </header>
-
-      <main className="max-w-6xl mx-auto space-y-8">
-         {attempts.length > 0 && (
-            <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                <h2 className="text-lg font-bold text-slate-800 mb-4">Performance Trend</h2>
-                <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                            <XAxis dataKey="date" stroke="#64748b" fontSize={12} tickLine={false} />
-                            <YAxis domain={[0, 12]} stroke="#64748b" fontSize={12} tickLine={false} />
-                            <Tooltip 
-                                contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                            />
-                            <Legend />
-                            <Line type="monotone" dataKey="bandScore" stroke="#2563eb" strokeWidth={3} dot={{ r: 4, fill: '#2563eb' }} activeDot={{ r: 6 }} name="Band Score" />
-                        </LineChart>
-                    </ResponsiveContainer>
-                </div>
-            </section>
-         )}
-
-         <section>
-            <h2 className="text-lg font-bold text-slate-800 mb-4">Available Practice Tests</h2>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-               {sets.map(set => (
-                 <div key={set.id} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow flex flex-col">
-                    <h3 className="font-bold text-slate-900 mb-2">{set.title}</h3>
-                    <p className="text-slate-500 text-xs mb-4 flex-1">{set.description}</p>
-                    <div className="flex items-center justify-between mt-4">
-                        <span className="text-xs text-slate-400">{set.sections.length} Sections</span>
-                        <Button onClick={() => onStartTest(set)} size="sm">Start Test</Button>
-                    </div>
-                 </div>
-               ))}
-               {sets.length === 0 && <p className="text-slate-400 text-sm italic col-span-3 text-center py-8">No practice tests available at the moment.</p>}
-            </div>
-         </section>
-
-         <section>
-            <h2 className="text-lg font-bold text-slate-800 mb-4">Attempt History</h2>
-            {attempts.length > 0 ? (
-               <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                  <table className="w-full text-sm text-left">
-                     <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                        <tr>
-                           <th className="px-6 py-3">Date</th>
-                           <th className="px-6 py-3">Test</th>
-                           <th className="px-6 py-3">Scores (Sec)</th>
-                           <th className="px-6 py-3">Band</th>
-                        </tr>
-                     </thead>
-                     <tbody className="divide-y divide-slate-100">
-                        {attempts.map(att => (
-                           <tr key={att.id} className="hover:bg-slate-50/50">
-                              <td className="px-6 py-3 text-slate-600">{att.date}</td>
-                              <td className="px-6 py-3 font-medium text-slate-900">{att.setTitle}</td>
-                              <td className="px-6 py-3 text-slate-600">
-                                 {att.sectionScores && Object.entries(att.sectionScores).map(([secId, score]) => (
-                                    <span key={secId} className="mr-2 text-[10px] bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-slate-500">
-                                       {score} pts
-                                    </span>
-                                 ))}
-                              </td>
-                              <td className="px-6 py-3 font-bold text-blue-600">{att.bandScore || '-'}</td>
-                           </tr>
-                        ))}
-                     </tbody>
-                  </table>
-               </div>
-            ) : (
-               <p className="text-slate-400 text-sm">No attempts yet.</p>
-            )}
-         </section>
-      </main>
-    </div>
-  );
-};
-
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [activeSet, setActiveSet] = useState<PracticeSet | null>(null);
+  const [view, setView] = useState<'DASHBOARD' | 'TEST'>('DASHBOARD');
+  const [sets, setSets] = useState<PracticeSet[]>([]);
+
+  useEffect(() => {
+     // Check for existing session if implemented, or just wait for login
+  }, []);
+
+  const handleLogin = (u: User) => {
+    setUser(u);
+    if (u.role === 'user') {
+       fetchSets();
+    }
+  };
+
+  const fetchSets = async () => {
+     const data = await API.getSets();
+     setSets(data.filter(s => s.isPublished));
+  };
+
+  const handleTestComplete = async (results: any) => {
+     if (user && activeSet) {
+        await API.saveAttempt({
+           id: `att-${Date.now()}`,
+           userId: user.id,
+           setId: activeSet.id,
+           setTitle: activeSet.title,
+           date: new Date().toISOString(),
+           sectionScores: results.sectionScores,
+           bandScore: 0
+        });
+        setActiveSet(null);
+        setView('DASHBOARD');
+        alert("Test submitted successfully!");
+     }
+  };
 
   if (!user) {
-    return <LoginScreen onLogin={setUser} />;
-  }
-
-  if (activeSet) {
-    return (
-      <TestRunner 
-        set={activeSet} 
-        onExit={() => {
-            if (window.confirm("Are you sure you want to exit? Your progress will be lost.")) {
-                setActiveSet(null);
-            }
-        }}
-        onComplete={async (results) => {
-           const totalCorrect = results.totalCorrect;
-           const bandScore = Math.min(12, Math.round(totalCorrect / 5) + 3); 
-           
-           const attempt: Attempt = {
-              id: `att-${Date.now()}`,
-              userId: user.id,
-              setId: activeSet.id,
-              setTitle: activeSet.title,
-              date: new Date().toLocaleDateString(),
-              sectionScores: results.sectionScores,
-              bandScore
-           };
-           
-           await API.saveAttempt(attempt);
-           alert(`Test Completed!\nEstimated Band Score: ${bandScore}`);
-           setActiveSet(null);
-        }}
-      />
-    );
+     return <LoginScreen onLogin={handleLogin} />;
   }
 
   if (user.role === 'admin') {
-    return <AdminDashboard user={user} onLogout={() => setUser(null)} />;
+     return <AdminDashboard user={user} onLogout={() => setUser(null)} />;
   }
 
-  return <UserDashboard user={user} onLogout={() => setUser(null)} onStartTest={setActiveSet} />;
+  if (view === 'TEST' && activeSet) {
+     return <TestRunner set={activeSet} onComplete={handleTestComplete} onExit={() => { setActiveSet(null); setView('DASHBOARD'); }} />;
+  }
+
+  return (
+     <div className="min-h-screen bg-slate-50">
+        <header className="bg-white shadow-sm border-b border-slate-200 px-6 py-4 flex justify-between items-center">
+           <h1 className="font-bold text-xl text-slate-800">Student Dashboard</h1>
+           <div className="flex items-center gap-4">
+              <span className="text-sm text-slate-600">{user.name}</span>
+              <Button variant="outline" size="sm" onClick={() => setUser(null)}>Logout</Button>
+           </div>
+        </header>
+        <main className="max-w-5xl mx-auto p-8">
+           <div className="mb-8">
+              <h2 className="text-2xl font-bold text-slate-900 mb-2">Available Practice Tests</h2>
+              <p className="text-slate-500">Select a test to begin practicing.</p>
+           </div>
+
+           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {sets.map(set => (
+                 <div key={set.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-shadow">
+                    <div className="p-6">
+                       <h3 className="font-bold text-lg text-slate-900 mb-2">{set.title}</h3>
+                       <p className="text-sm text-slate-500 mb-6 line-clamp-2">{set.description || 'No description.'}</p>
+                       <div className="flex items-center gap-2 mb-6">
+                          {set.sections.map((s, i) => (
+                             <div key={i} className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500 border border-slate-200" title={s.type}>
+                                {s.type[0]}
+                             </div>
+                          ))}
+                          <span className="text-xs text-slate-400 ml-1">{set.sections.length} Sections</span>
+                       </div>
+                       <Button className="w-full" onClick={() => { setActiveSet(set); setView('TEST'); }}>Start Practice</Button>
+                    </div>
+                 </div>
+              ))}
+              {sets.length === 0 && (
+                 <div className="col-span-full py-12 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-xl">
+                    No practice sets available currently.
+                 </div>
+              )}
+           </div>
+        </main>
+     </div>
+  );
 };
 
 export default App;

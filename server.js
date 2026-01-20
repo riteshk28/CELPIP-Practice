@@ -13,7 +13,7 @@ app.use(bodyParser.json({ limit: '50mb' }));
 
 // Database Connection
 const pool = new Pool({
-  connectionString: 'postgresql://neondb_owner:npg_LQglPOITy69A@ep-steep-wildflower-ahck6uyl-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require',
+  connectionString: process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_LQglPOITy69A@ep-steep-wildflower-ahck6uyl-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require',
 });
 
 // --- ROUTES ---
@@ -68,6 +68,7 @@ app.post('/api/signup', async (req, res) => {
 app.get('/api/sets', async (req, res) => {
   try {
     // This query constructs the nested JSON object: Set -> Sections -> Parts -> (Segments -> Questions) OR (Questions)
+    // Updated to include q.audio_data and q.timer_seconds
     const query = `
       SELECT 
         s.id, s.title, s.description, s.is_published as "isPublished",
@@ -103,7 +104,9 @@ app.get('/api/sets', async (req, res) => {
                             'type', q.type,
                             'options', q.options,
                             'correctAnswer', q.correct_answer,
-                            'weight', q.weight
+                            'weight', q.weight,
+                            'audioData', q.audio_data,
+                            'timerSeconds', COALESCE(q.timer_seconds, 0)
                           ) ORDER BY q.order_index ASC) FROM questions q WHERE q.segment_id = seg.id
                        ), '[]'::json)
                    ) ORDER BY seg.order_index ASC) FROM segments seg WHERE seg.part_id = p.id
@@ -117,7 +120,9 @@ app.get('/api/sets', async (req, res) => {
                     'type', q.type,
                     'options', q.options,
                     'correctAnswer', q.correct_answer,
-                    'weight', q.weight
+                    'weight', q.weight,
+                    'audioData', q.audio_data,
+                    'timerSeconds', COALESCE(q.timer_seconds, 0)
                   ) ORDER BY q.order_index ASC) FROM questions q WHERE q.part_id = p.id AND q.segment_id IS NULL
                 ), '[]'::json)
               ) ORDER BY p.order_index ASC) FROM parts p WHERE p.section_id = sec.id
@@ -177,8 +182,8 @@ app.post('/api/sets', async (req, res) => {
                 let qOrder = 0;
                 for (const q of seg.questions) {
                   await client.query(
-                    'INSERT INTO questions (id, part_id, segment_id, question_text, type, options, correct_answer, weight, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-                    [q.id, part.id, seg.id, q.text, q.type, JSON.stringify(q.options || []), q.correctAnswer, q.weight, qOrder++]
+                    'INSERT INTO questions (id, part_id, segment_id, question_text, type, options, correct_answer, weight, order_index, audio_data, timer_seconds) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
+                    [q.id, part.id, seg.id, q.text, q.type, JSON.stringify(q.options || []), q.correctAnswer, q.weight, qOrder++, q.audioData, q.timerSeconds]
                   );
                 }
             }
@@ -187,10 +192,9 @@ app.post('/api/sets', async (req, res) => {
         // Handle Direct Questions (Reading/Writing)
         let qOrder = 0;
         for (const q of part.questions) {
-          // Skip if it somehow has a segmentId but is in the top-level list, though that shouldn't happen with clean state
           await client.query(
-            'INSERT INTO questions (id, part_id, question_text, type, options, correct_answer, weight, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-            [q.id, part.id, q.text, q.type, JSON.stringify(q.options || []), q.correctAnswer, q.weight, qOrder++]
+            'INSERT INTO questions (id, part_id, question_text, type, options, correct_answer, weight, order_index, audio_data, timer_seconds) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+            [q.id, part.id, q.text, q.type, JSON.stringify(q.options || []), q.correctAnswer, q.weight, qOrder++, q.audioData, q.timerSeconds]
           );
         }
       }
