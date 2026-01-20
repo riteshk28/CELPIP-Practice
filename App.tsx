@@ -1,7 +1,5 @@
 
-// ... (imports remain the same)
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState, useEffect, useRef } from 'react';
 import { User, PracticeSet, Attempt, QuestionType, Segment, Question, SectionType, Part } from './types';
 import { API } from './services/api';
 import { Button } from './components/Button';
@@ -519,7 +517,7 @@ const SetEditor: React.FC<{
   );
 };
 
-// 4. SEGMENT EDITOR (UPDATED for Question Audio & Timers)
+// 4. SEGMENT EDITOR
 const SegmentEditor: React.FC<{
   segment: Segment;
   index: number;
@@ -684,7 +682,7 @@ const SegmentEditor: React.FC<{
                                     placeholder="0 (Use Segment Timer)"
                                     onChange={e => updateQuestion(q.id, { timerSeconds: parseInt(e.target.value) || 0 })}
                                 />
-                                <span className="text-[9px] text-slate-400 block mt-1 leading-tight">Setting this > 0 enables sequential question mode for this item.</span>
+                                <span className="text-[9px] text-slate-400 block mt-1 leading-tight">Setting this &gt; 0 enables sequential question mode for this item.</span>
                              </div>
                          </div>
                      )}
