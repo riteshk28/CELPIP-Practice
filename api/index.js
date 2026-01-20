@@ -84,40 +84,16 @@ app.get('/api/sets', async (req, res) => {
                 'imageData', p.image_data,
                 'instructions', p.instructions,
                 'timerSeconds', COALESCE(p.timer_seconds, 600),
-                'segments', COALESCE((
-                   SELECT json_agg(json_build_object(
-                      'id', seg.id,
-                      'partId', seg.part_id,
-                      'title', seg.title,
-                      'contentText', seg.content_text,
-                      'audioData', seg.audio_data,
-                      'prepTimeSeconds', COALESCE(seg.prep_time_seconds, 0),
-                      'timerSeconds', COALESCE(seg.timer_seconds, 0),
-                      'questions', COALESCE((
-                          SELECT json_agg(json_build_object(
-                            'id', q.id,
-                            'partId', q.part_id,
-                            'segmentId', q.segment_id,
-                            'text', q.question_text,
-                            'type', q.type,
-                            'options', q.options,
-                            'correctAnswer', q.correct_answer,
-                            'weight', q.weight
-                          ) ORDER BY q.order_index ASC) FROM questions q WHERE q.segment_id = seg.id
-                       ), '[]'::json)
-                   ) ORDER BY seg.order_index ASC) FROM segments seg WHERE seg.part_id = p.id
-                ), '[]'::json),
                 'questions', COALESCE((
                   SELECT json_agg(json_build_object(
                     'id', q.id,
                     'partId', q.part_id,
-                    'segmentId', q.segment_id,
                     'text', q.question_text,
                     'type', q.type,
                     'options', q.options,
                     'correctAnswer', q.correct_answer,
                     'weight', q.weight
-                  ) ORDER BY q.order_index ASC) FROM questions q WHERE q.part_id = p.id AND q.segment_id IS NULL
+                  ) ORDER BY q.order_index ASC) FROM questions q WHERE q.part_id = p.id
                 ), '[]'::json)
               ) ORDER BY p.order_index ASC) FROM parts p WHERE p.section_id = sec.id
             ), '[]'::json)
@@ -140,7 +116,7 @@ app.post('/api/sets', async (req, res) => {
   
   try {
     await client.query('BEGIN');
-    
+    // Using simple replace strategy
     await client.query('DELETE FROM practice_sets WHERE id = $1', [set.id]);
     
     await client.query(
@@ -162,27 +138,6 @@ app.post('/api/sets', async (req, res) => {
           [part.id, sec.id, part.contentText, part.imageData, part.instructions, part.timerSeconds, partOrder++]
         );
 
-        // Handle Segments (Listening)
-        if (part.segments && part.segments.length > 0) {
-            let segOrder = 0;
-            for (const seg of part.segments) {
-                await client.query(
-                   'INSERT INTO segments (id, part_id, title, content_text, audio_data, prep_time_seconds, timer_seconds, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-                   [seg.id, part.id, seg.title, seg.contentText, seg.audioData, seg.prepTimeSeconds, seg.timerSeconds, segOrder++]
-                );
-
-                // Questions belonging to Segment
-                let qOrder = 0;
-                for (const q of seg.questions) {
-                  await client.query(
-                    'INSERT INTO questions (id, part_id, segment_id, question_text, type, options, correct_answer, weight, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-                    [q.id, part.id, seg.id, q.text, q.type, JSON.stringify(q.options || []), q.correctAnswer, q.weight, qOrder++]
-                  );
-                }
-            }
-        }
-
-        // Handle Direct Questions (Reading/Writing)
         let qOrder = 0;
         for (const q of part.questions) {
           await client.query(
@@ -218,6 +173,8 @@ app.delete('/api/sets/:id', async (req, res) => {
 app.post('/api/attempts', async (req, res) => {
   const att = req.body;
   try {
+    // Note: 'att.setTitle' is sent from frontend but not stored in user_attempts in this schema.
+    // It will be retrieved via JOIN in GET request.
     await pool.query(
       'INSERT INTO user_attempts (id, user_id, set_id, section_scores, total_band_score, completed_at) VALUES ($1, $2, $3, $4, $5, $6)',
       [att.id, att.userId, att.setId, JSON.stringify(att.sectionScores), att.bandScore, new Date()]
@@ -231,6 +188,7 @@ app.post('/api/attempts', async (req, res) => {
 // 7. GET ATTEMPTS
 app.get('/api/attempts/:userId', async (req, res) => {
   try {
+    // JOIN to get the set title
     const query = `
       SELECT ua.*, ps.title as set_title 
       FROM user_attempts ua 

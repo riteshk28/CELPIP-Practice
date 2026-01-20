@@ -14,40 +14,21 @@ export type QuestionType = 'MCQ' | 'CLOZE' | 'PASSAGE';
 export interface Question {
   id: string;
   partId: string;
-  segmentId?: string; // For questions belonging to a specific segment (Listening)
-  text: string; 
+  text: string; // For Cloze, this corresponds to the placeholder ID (e.g., "1"). For Passage, this is the content.
   type: QuestionType;
-  options?: string[]; 
-  correctAnswer?: string; 
+  options?: string[]; // For MCQ/Cloze
+  correctAnswer?: string; // For auto-grading
   weight: number;
-  // NEW: Advanced Listening Features
-  audioData?: string; // Base64 audio for the question itself (e.g. "Listen to the question")
-  timerSeconds?: number; // Specific timer for this question (0 = use segment timer)
-}
-
-// A Segment is a sub-unit of a Part (e.g., one audio track + questions)
-export interface Segment {
-  id: string;
-  partId: string;
-  title?: string;
-  contentText?: string; // Instructions or text prompt
-  audioData?: string; // Base64 or URL
-  prepTimeSeconds: number; // Time to read questions before audio
-  timerSeconds: number; // Time for audio + answering
-  questions: Question[];
 }
 
 export interface Part {
   id: string;
   sectionId: string;
-  contentText: string; 
-  imageData?: string; 
+  contentText: string; // Main Passage (Left Side)
+  imageData?: string; // Base64
   instructions?: string;
-  // Reading/Writing use 'questions' directly. Listening uses 'segments'.
-  questions: Question[]; 
-  segments?: Segment[]; // Container for Listening segments
-  prepTimeSeconds?: number; // Specific for Speaking Parts
-  timerSeconds: number; 
+  questions: Question[]; // Now contains MCQs, CLOZE definitions, AND PASSAGE blocks mixed
+  timerSeconds: number; // Duration for this specific part
 }
 
 export interface Section {
@@ -72,7 +53,7 @@ export interface Attempt {
   setId: string;
   setTitle: string;
   date: string;
-  sectionScores: Record<string, number>; 
+  sectionScores: Record<string, number>; // SectionId -> Score
   bandScore?: number;
 }
 

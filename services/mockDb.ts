@@ -50,8 +50,7 @@ const INITIAL_SETS: PracticeSet[] = [
                 correctAnswer: 'Over 45 minutes',
                 weight: 1
               }
-            ],
-            segments: []
+            ]
           },
           {
             id: 'part-1b',
@@ -78,8 +77,7 @@ const INITIAL_SETS: PracticeSet[] = [
                 correctAnswer: 'fearless',
                 weight: 1
               }
-            ],
-            segments: []
+            ]
           }
         ]
       },
@@ -95,8 +93,7 @@ const INITIAL_SETS: PracticeSet[] = [
             timerSeconds: 1200,
             instructions: 'Write an email of about 150-200 words.',
             contentText: "You recently bought a piece of furniture which was damaged during delivery. Write an email to the manager of the furniture company.\n\nIn your email:\n- Describe the furniture you bought\n- Explain the damage\n- Say what you want the company to do",
-            questions: [],
-            segments: []
+            questions: [] 
           }
         ]
       }
