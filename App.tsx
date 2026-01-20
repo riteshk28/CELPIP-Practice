@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { User, PracticeSet, Attempt, QuestionType } from './types';
+import { User, PracticeSet, Attempt, QuestionType, Segment, Question, SectionType } from './types';
 import { API } from './services/api';
 import { Button } from './components/Button';
 import { Input, TextArea } from './components/Input';
@@ -112,7 +112,7 @@ const RichTextEditor: React.FC<{
 
 // --- SUB-COMPONENTS --- //
 
-// 1. LOGIN / SIGNUP SCREEN
+// 1. LOGIN / SIGNUP SCREEN (Unchanged)
 const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
@@ -210,7 +210,7 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
   );
 };
 
-// 2. ADMIN DASHBOARD
+// 2. ADMIN DASHBOARD (Unchanged)
 const AdminDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLogout }) => {
   const [sets, setSets] = useState<PracticeSet[]>([]);
   const [editingSet, setEditingSet] = useState<PracticeSet | null>(null);
@@ -302,7 +302,6 @@ const AdminDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, 
               key={set.id} 
               className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col hover:shadow-md transition-shadow"
             >
-              {/* Card Body - Clickable to Edit */}
               <div 
                 className="p-6 cursor-pointer hover:bg-slate-50 transition-colors flex-1"
                 onClick={() => setEditingSet(set)}
@@ -326,7 +325,6 @@ const AdminDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, 
                 </div>
               </div>
               
-              {/* Card Footer - Actions */}
               <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center z-10 relative">
                  <button onClick={() => setEditingSet(set)} className="text-xs font-bold text-blue-600 hover:text-blue-700">Edit</button>
                  <button 
@@ -346,7 +344,7 @@ const AdminDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, 
   );
 };
 
-// 3. SET EDITOR
+// 3. SET EDITOR (With Speaking Support via Segments)
 const SetEditor: React.FC<{ 
   set: PracticeSet; 
   onChange: (s: PracticeSet) => void; 
@@ -356,7 +354,7 @@ const SetEditor: React.FC<{
 }> = ({ set, onChange, onSave, onCancel, isSaving }) => {
   const [activeSectionId, setActiveSectionId] = useState<string | null>(set.sections[0]?.id || null);
 
-  const addSection = (type: 'READING' | 'WRITING') => {
+  const addSection = (type: 'READING' | 'WRITING' | 'LISTENING' | 'SPEAKING') => {
     const newSection = {
       id: `sec-${Date.now()}`,
       setId: set.id,
@@ -389,7 +387,8 @@ const SetEditor: React.FC<{
       timerSeconds: 600,
       contentText: '',
       questions: [],
-      instructions: 'Read the text and answer the questions.'
+      instructions: 'Instructions...',
+      segments: [] // Initialize Segments
     };
     
     const updatedSection = { ...section, parts: [...section.parts, newPart] };
@@ -444,6 +443,12 @@ const SetEditor: React.FC<{
                <button onClick={() => addSection('WRITING')} disabled={isSaving} className="flex flex-col items-center justify-center p-2 text-xs bg-white border border-slate-200 rounded hover:border-green-400 hover:text-green-600 transition-colors shadow-sm disabled:opacity-50">
                   <span className="font-bold">+ Writing</span>
                </button>
+               <button onClick={() => addSection('LISTENING')} disabled={isSaving} className="flex flex-col items-center justify-center p-2 text-xs bg-white border border-slate-200 rounded hover:border-amber-400 hover:text-amber-600 transition-colors shadow-sm disabled:opacity-50">
+                  <span className="font-bold">+ Listening</span>
+               </button>
+               <button onClick={() => addSection('SPEAKING')} disabled={isSaving} className="flex flex-col items-center justify-center p-2 text-xs bg-white border border-slate-200 rounded hover:border-purple-400 hover:text-purple-600 transition-colors shadow-sm disabled:opacity-50">
+                  <span className="font-bold">+ Speaking</span>
+               </button>
             </div>
           </div>
           <div className="p-2 space-y-1">
@@ -460,7 +465,7 @@ const SetEditor: React.FC<{
                 <button 
                   onClick={(e) => { e.stopPropagation(); deleteSection(section.id); }}
                   disabled={isSaving}
-                  className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 px-1 transition-opacity disabled:opacity-0"
+                  className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-50 px-1 transition-opacity disabled:opacity-0"
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
@@ -523,7 +528,163 @@ const SetEditor: React.FC<{
   );
 };
 
-// 4. PART EDITOR (Inner component for SetEditor)
+// 4. SEGMENT EDITOR
+const SegmentEditor: React.FC<{
+  segment: Segment;
+  index: number;
+  sectionType: string;
+  onChange: (s: Segment) => void;
+  onDelete: () => void;
+}> = ({ segment, index, sectionType, onChange, onDelete }) => {
+  const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        onChange({ ...segment, audioData: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const addQuestion = () => {
+    const newQ: Question = {
+      id: `q-${Date.now()}`,
+      partId: segment.partId,
+      segmentId: segment.id,
+      text: '',
+      type: 'MCQ',
+      options: ['', '', '', ''],
+      correctAnswer: '',
+      weight: 1
+    };
+    onChange({ ...segment, questions: [...segment.questions, newQ] });
+  };
+
+  const updateQuestion = (qId: string, updates: Partial<Question>) => {
+     const newQs = segment.questions.map(q => q.id === qId ? { ...q, ...updates } : q);
+     onChange({ ...segment, questions: newQs });
+  };
+
+  const deleteQuestion = (qId: string) => {
+     onChange({ ...segment, questions: segment.questions.filter(q => q.id !== qId) });
+  };
+
+  return (
+    <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 mb-4 relative shadow-sm">
+       <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-2">
+          <h4 className="font-bold text-slate-700 text-sm">
+             {sectionType === 'SPEAKING' ? `Task ${index + 1}` : `Segment ${index + 1}`}
+          </h4>
+          <button onClick={onDelete} className="text-xs text-red-500 hover:text-red-700 underline">Delete {sectionType === 'SPEAKING' ? 'Task' : 'Segment'}</button>
+       </div>
+       
+       {/* Configuration Row */}
+       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div>
+             <label className="block text-xs font-bold text-slate-500 mb-1">
+                {sectionType === 'SPEAKING' ? 'Audio Prompt (Optional)' : 'Audio Track'}
+             </label>
+             {!segment.audioData ? (
+                <input type="file" accept="audio/*" onChange={handleAudioUpload} className="text-xs w-full text-slate-500" />
+             ) : (
+                <div className="flex flex-col gap-2">
+                   <audio controls src={segment.audioData} className="h-8 w-full" />
+                   <button onClick={() => onChange({ ...segment, audioData: undefined })} className="text-red-500 text-xs font-bold self-start">Remove Audio</button>
+                </div>
+             )}
+          </div>
+          <div>
+             <label className="block text-xs font-bold text-slate-500 mb-1">Prep Time (sec)</label>
+             <input 
+               type="number" 
+               className="border rounded px-2 py-1 text-sm w-full bg-white text-slate-900"
+               value={segment.prepTimeSeconds}
+               onChange={e => onChange({ ...segment, prepTimeSeconds: parseInt(e.target.value) || 0 })}
+             />
+          </div>
+          <div>
+             <label className="block text-xs font-bold text-slate-500 mb-1">
+                {sectionType === 'SPEAKING' ? 'Recording Time (sec)' : 'Total Time (sec)'}
+             </label>
+             <input 
+               type="number" 
+               className="border rounded px-2 py-1 text-sm w-full bg-white text-slate-900"
+               value={segment.timerSeconds}
+               onChange={e => onChange({ ...segment, timerSeconds: parseInt(e.target.value) || 0 })}
+             />
+          </div>
+       </div>
+
+       {/* Content Text */}
+       <div className="mb-4">
+          <label className="block text-xs font-bold text-slate-500 mb-1">
+             {sectionType === 'SPEAKING' ? 'Prompt Text / Instructions' : 'Segment Context'}
+          </label>
+          <RichTextEditor 
+             value={segment.contentText || ''} 
+             onChange={val => onChange({ ...segment, contentText: val })} 
+             className="bg-white min-h-[80px]"
+             placeholder="e.g. Listen to the conversation and answer..."
+          />
+       </div>
+
+       {/* Questions - Only for Listening */}
+       {sectionType === 'LISTENING' && (
+         <div className="bg-white border border-slate-200 rounded p-3">
+            <div className="flex justify-between items-center mb-2">
+               <label className="text-xs font-bold text-slate-500">Questions ({segment.questions.length})</label>
+               <button onClick={addQuestion} className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded hover:bg-blue-100 font-bold border border-blue-100">+ Add MCQ</button>
+            </div>
+            <div className="space-y-3">
+               {segment.questions.map((q, i) => (
+                  <div key={q.id} className="border-b border-slate-100 pb-3 last:border-0">
+                     <div className="flex gap-2 mb-2 items-center">
+                        <span className="text-xs font-bold text-slate-400 w-4">{i + 1}.</span>
+                        <input 
+                           className="flex-1 border border-slate-300 rounded px-2 py-1 text-sm bg-white text-slate-900"
+                           placeholder="Question Text"
+                           value={q.text}
+                           onChange={e => updateQuestion(q.id, { text: e.target.value })}
+                        />
+                        <button onClick={() => deleteQuestion(q.id)} className="text-slate-300 hover:text-red-500 font-bold px-2">&times;</button>
+                     </div>
+                     <div className="pl-6 grid grid-cols-2 gap-2">
+                        {q.options?.map((opt, oIdx) => (
+                           <div key={oIdx} className="flex items-center gap-1">
+                              <input 
+                                 type="radio" 
+                                 name={`seg-q-${q.id}`}
+                                 checked={q.correctAnswer === opt && opt !== ''}
+                                 onChange={() => updateQuestion(q.id, { correctAnswer: opt })}
+                                 className="cursor-pointer"
+                              />
+                              <input 
+                                 className="flex-1 border border-slate-200 rounded px-2 py-0.5 text-xs bg-white text-slate-900"
+                                 value={opt}
+                                 placeholder={`Option ${oIdx + 1}`}
+                                 onChange={e => {
+                                    const newOpts = [...(q.options || [])];
+                                    newOpts[oIdx] = e.target.value;
+                                    let newCorrect = q.correctAnswer;
+                                    if (q.correctAnswer === opt) newCorrect = e.target.value;
+                                    updateQuestion(q.id, { options: newOpts, correctAnswer: newCorrect });
+                                 }}
+                              />
+                           </div>
+                        ))}
+                     </div>
+                  </div>
+               ))}
+               {segment.questions.length === 0 && <p className="text-xs text-slate-400 italic text-center py-2">No questions yet. Add one to begin.</p>}
+            </div>
+         </div>
+       )}
+    </div>
+  );
+};
+
+// 5. PART EDITOR
 const PartEditor: React.FC<{ 
   part: any; 
   index: number; 
@@ -533,6 +694,103 @@ const PartEditor: React.FC<{
 }> = ({ part, index, sectionType, onChange, onDelete }) => {
   const [timerMode, setTimerMode] = useState<'sec' | 'mmss'>('sec');
 
+  const formatMMSS = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  const parseMMSS = (val: string) => {
+    if (val.includes(':')) {
+      const [m, s] = val.split(':').map(Number);
+      return (m || 0) * 60 + (s || 0);
+    }
+    return parseInt(val) || 0;
+  };
+
+  // LISTENING OR SPEAKING MODE (Segment Based)
+  if (sectionType === 'LISTENING' || sectionType === 'SPEAKING') {
+     const addSegment = () => {
+        const newSeg: Segment = {
+           id: `seg-${Date.now()}`,
+           partId: part.id,
+           title: `Segment ${(part.segments?.length || 0) + 1}`,
+           contentText: '',
+           prepTimeSeconds: 10,
+           timerSeconds: 60,
+           questions: []
+        };
+        onChange({ ...part, segments: [...(part.segments || []), newSeg] });
+     };
+
+     const updateSegment = (segId: string, updates: Partial<Segment>) => {
+        const newSegs = part.segments?.map((s: Segment) => s.id === segId ? { ...s, ...updates } : s) || [];
+        onChange({ ...part, segments: newSegs });
+     };
+
+     const deleteSegment = (segId: string) => {
+        const newSegs = part.segments?.filter((s: Segment) => s.id !== segId) || [];
+        onChange({ ...part, segments: newSegs });
+     };
+
+     const colorClass = sectionType === 'LISTENING' ? 'amber' : 'purple';
+
+     return (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden transition-all hover:shadow-md">
+           <div className={`bg-${colorClass}-50 px-5 py-3 border-b border-${colorClass}-100 flex justify-between items-center`}>
+              <div className="flex items-center gap-2">
+                 <span className={`bg-white border border-${colorClass}-200 text-${colorClass}-600 text-xs font-bold px-2 py-0.5 rounded`}>PART {index + 1}</span>
+                 <span className={`text-xs text-${colorClass}-700 font-medium`}>{sectionType === 'LISTENING' ? 'Listening Task' : 'Speaking Task'}</span>
+              </div>
+              <button onClick={onDelete} className={`text-${colorClass}-400 hover:text-red-500 text-xs flex items-center gap-1 transition-colors`}>
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              </button>
+           </div>
+           
+           <div className="p-5">
+              <div className="mb-6">
+                 <label className="block text-xs font-bold text-slate-500 mb-2">General Instructions (Shown at start of Part)</label>
+                 <Input 
+                   value={part.instructions || ''} 
+                   onChange={e => onChange({ ...part, instructions: e.target.value })} 
+                   placeholder="e.g. Listen/Speak about..."
+                   className="bg-white text-slate-900"
+                 />
+              </div>
+
+              <div className="space-y-4">
+                 <div className="flex justify-between items-center">
+                    <h4 className="text-sm font-bold text-slate-800">
+                        {sectionType === 'SPEAKING' ? 'Speaking Prompts Sequence' : 'Segments Sequence'}
+                    </h4>
+                    <Button size="sm" onClick={addSegment} className={`bg-${colorClass}-600 hover:bg-${colorClass}-700 text-white shadow-sm`}>
+                        {sectionType === 'SPEAKING' ? '+ Add Prompt' : '+ Add Segment'}
+                    </Button>
+                 </div>
+                 
+                 {part.segments && part.segments.length > 0 ? (
+                    part.segments.map((seg: Segment, sIdx: number) => (
+                       <SegmentEditor 
+                          key={seg.id} 
+                          segment={seg} 
+                          index={sIdx} 
+                          sectionType={sectionType}
+                          onChange={(updated) => updateSegment(seg.id, updated)}
+                          onDelete={() => deleteSegment(seg.id)}
+                       />
+                    ))
+                 ) : (
+                    <div className="text-center p-8 bg-slate-50 rounded border border-dashed border-slate-300 text-slate-400 text-xs">
+                       {sectionType === 'SPEAKING' ? 'No prompts yet. Add a speaking prompt.' : 'No segments yet. Add an Audio Segment.'}
+                    </div>
+                 )}
+              </div>
+           </div>
+        </div>
+     );
+  }
+
+  // EXISTING READING/WRITING EDITOR LOGIC
   const addItem = (type: QuestionType) => {
     const newItem = {
       id: `item-${Date.now()}`,
@@ -557,20 +815,6 @@ const PartEditor: React.FC<{
     }
   };
 
-  const formatMMSS = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s < 10 ? '0' : ''}${s}`;
-  };
-
-  const parseMMSS = (val: string) => {
-    if (val.includes(':')) {
-      const [m, s] = val.split(':').map(Number);
-      return (m || 0) * 60 + (s || 0);
-    }
-    return parseInt(val) || 0;
-  };
-
   // Logic to calculate numbering for list items
   let questionCounter = 0;
   const numberedQuestions = part.questions.map((q: any) => {
@@ -587,7 +831,7 @@ const PartEditor: React.FC<{
       <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex justify-between items-center">
         <div className="flex items-center gap-2">
            <span className="bg-white border border-slate-200 text-slate-500 text-xs font-bold px-2 py-0.5 rounded">PART {index + 1}</span>
-           <span className="text-xs text-slate-400">
+           <span className="text-xs text-slate-400 font-bold uppercase">
              {sectionType === 'READING' ? 'Passage & Questions' : 'Writing Prompt'}
            </span>
         </div>
@@ -828,7 +1072,52 @@ const PartEditor: React.FC<{
   );
 };
 
-// --- TestRunner Helpers ---
+// ... existing TestRunner Helpers ... (Unchanged SectionIntro, ClozeRenderer, SectionReview)
+
+// NEW: SECTION INTRO SCREEN
+const SectionIntro: React.FC<{
+  title: string;
+  type: SectionType;
+  onStart: () => void;
+}> = ({ title, type, onStart }) => {
+  const instructions = {
+    READING: "This section contains several parts. Read the passages/questions and answer the questions. You can manage your time as you see fit within the section limit.",
+    LISTENING: "This section tests your listening comprehension. You will hear each audio clip ONLY ONCE. You will have time to read the questions before the audio begins.",
+    WRITING: "Answer the following writing prompts. Pay attention to the word count limits and tone.",
+    SPEAKING: "This section tests your speaking ability. You will need a microphone. You will have a short Preparation Time followed by a Recording Time for each prompt."
+  };
+
+  return (
+    <div className="h-screen flex items-center justify-center bg-slate-50 p-6">
+      <div className="max-w-2xl w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200 animate-in zoom-in fade-in duration-300">
+         <div className="bg-slate-900 px-8 py-6">
+            <h1 className="text-2xl font-bold text-white tracking-wide uppercase">{type} SECTION</h1>
+            <p className="text-slate-400 mt-1">{title}</p>
+         </div>
+         <div className="p-10 space-y-8">
+            <div>
+               <h3 className="text-lg font-bold text-slate-800 mb-2">Instructions</h3>
+               <p className="text-slate-600 leading-relaxed text-lg">
+                 {instructions[type] || "Complete the tasks in this section."}
+               </p>
+            </div>
+            
+            <div className="bg-amber-50 border-l-4 border-amber-400 p-4 text-amber-800 text-sm rounded-r">
+               <strong>Note:</strong> Once you start, the timer will begin immediately.
+               {type === 'LISTENING' && " Ensure your audio volume is set correctly."}
+               {type === 'SPEAKING' && " Please ensure your microphone is connected and allowed in browser settings."}
+            </div>
+
+            <div className="flex justify-end pt-4">
+               <Button size="lg" onClick={onStart} className="shadow-lg shadow-blue-200 w-full sm:w-auto transform transition hover:-translate-y-1">
+                 Start {type} Section &rarr;
+               </Button>
+            </div>
+         </div>
+      </div>
+    </div>
+  );
+};
 
 const ClozeRenderer: React.FC<{
   htmlContent: string;
@@ -844,8 +1133,6 @@ const ClozeRenderer: React.FC<{
     // If content is just plain text with newlines (legacy data), convert to basic HTML
     let content = htmlContent;
     if (!content.includes('<') && content.includes('\n')) {
-       // It's likely plain text. Convert newlines to breaks/paragraphs.
-       // But to avoid double wrapping if we have mixed content, we do a simple check.
        content = content.replace(/\n/g, '<br/>');
     }
 
@@ -897,7 +1184,6 @@ const ClozeRenderer: React.FC<{
   );
 };
 
-
 // 5. TEST TAKER INTERFACE - REFACTORED FOR REVIEW
 const SectionReview: React.FC<{ 
     section: any; 
@@ -912,7 +1198,10 @@ const SectionReview: React.FC<{
    section.parts.forEach((part: any, pIdx: number) => {
       // Group details by Part to give context
       const partDetails: any[] = [];
-      part.questions.forEach((q: any) => {
+      // Combine direct questions and segment questions for review
+      const allQuestions = [...(part.questions || []), ...(part.segments?.flatMap((s: any) => s.questions) || [])];
+      
+      allQuestions.forEach((q: any) => {
          if (q.type === 'MCQ' || q.type === 'CLOZE') {
             total++;
             const isCorrect = answers[q.id] === q.correctAnswer;
@@ -999,60 +1288,160 @@ const TestRunner: React.FC<{
 }> = ({ set, onComplete, onExit }) => {
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [currentPartIndex, setCurrentPartIndex] = useState(0);
+  const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0); // For Listening & Speaking
+  
+  const [viewState, setViewState] = useState<'INTRO' | 'TEST' | 'REVIEW'>('INTRO');
+  // Listening & Speaking Phases
+  const [phase, setPhase] = useState<'PREP' | 'WORKING' | 'RECORDING'>('PREP');
+  const [volume, setVolume] = useState(1);
+  const [isRecording, setIsRecording] = useState(false);
+  
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [timeLeft, setTimeLeft] = useState(0);
   const [writingInputs, setWritingInputs] = useState<Record<string, string>>({});
-  const [showReview, setShowReview] = useState(false);
+  
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
   const section = set.sections[currentSectionIndex];
   const part = section?.parts[currentPartIndex];
+  const segment = (section?.type === 'LISTENING' || section?.type === 'SPEAKING') ? part?.segments?.[currentSegmentIndex] : null;
 
+  // Initialize Timer based on Section Type
   useEffect(() => {
-    if (part) {
-      setTimeLeft(part.timerSeconds || 600);
+    if (!part || viewState !== 'TEST') return;
+
+    if (section.type === 'LISTENING' && segment) {
+        if (phase === 'PREP') {
+            setTimeLeft(segment.prepTimeSeconds);
+            if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current.currentTime = 0;
+            }
+        } else {
+            setTimeLeft(segment.timerSeconds);
+            if (audioRef.current) {
+                audioRef.current.volume = volume;
+                audioRef.current.play().catch(e => console.error("Audio play failed (user gesture required?)", e));
+            }
+        }
+    } else if (section.type === 'SPEAKING' && segment) {
+        // SPEAKING USES SEGMENTS NOW
+        if (phase === 'PREP') {
+           setTimeLeft(segment.prepTimeSeconds || 30);
+           stopRecording();
+        } else {
+           setTimeLeft(segment.timerSeconds || 60);
+           startRecording();
+        }
+    } else {
+        // Reading/Writing Logic (Simple Part Timer)
+        setTimeLeft(part.timerSeconds || 600);
     }
-  }, [part]);
+  }, [part, segment, phase, section.type, viewState]);
 
+  // Speaking Recording Logic
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start();
+      setIsRecording(true);
+      console.log("Recording started...");
+    } catch (err) {
+      console.error("Error accessing microphone:", err);
+      // Fallback for demo/dev without mic
+      setIsRecording(true); 
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      setIsRecording(false);
+      console.log("Recording stopped.");
+    }
+  };
+
+  // Update volume when slider changes
   useEffect(() => {
-    if (timeLeft <= 0 && part && !showReview) {
+     if(audioRef.current) {
+         audioRef.current.volume = volume;
+     }
+  }, [volume]);
+
+  // Timer Tick & Auto-Advance
+  useEffect(() => {
+    if (viewState !== 'TEST') return;
+
+    if (timeLeft <= 0 && part) {
+      handleAutoAdvance();
       return; 
     }
     const timer = setInterval(() => setTimeLeft(prev => Math.max(0, prev - 1)), 1000);
     return () => clearInterval(timer);
-  }, [timeLeft, part, showReview]);
+  }, [timeLeft, part, viewState]);
 
-  const formatTime = (sec: number) => {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  const handleAutoAdvance = () => {
+      if (section.type === 'LISTENING') {
+          if (phase === 'PREP') {
+              setPhase('WORKING');
+          } else {
+              // Working phase done, move to next segment
+              handleNextSegment();
+          }
+      } else if (section.type === 'SPEAKING') {
+          if (phase === 'PREP') {
+              setPhase('RECORDING');
+          } else {
+              // Recording done
+              stopRecording();
+              handleNextSegment();
+          }
+      } else {
+          // Standard Reading/Writing
+          handleNext();
+      }
+  };
+
+  const handleNextSegment = () => {
+      if (part.segments && currentSegmentIndex < part.segments.length - 1) {
+          setCurrentSegmentIndex(prev => prev + 1);
+          setPhase('PREP');
+      } else {
+          // End of Part segments
+          handleNext();
+      }
   };
 
   const handleNext = () => {
-    // Check if we are at the end of the Reading section to show review
+    // Cleanup Recording if active
+    if (isRecording) stopRecording();
+
     const isLastPart = currentPartIndex === section.parts.length - 1;
-    if (isLastPart && section.type === 'READING' && !showReview) {
-        setShowReview(true);
+    
+    // For Listening, we just finished a part.
+    // For Reading, check if review needed.
+    if (section.type === 'READING' && isLastPart && viewState !== 'REVIEW') {
+        setViewState('REVIEW');
         return;
     }
 
     if (currentPartIndex < section.parts.length - 1) {
       setCurrentPartIndex(prev => prev + 1);
+      setCurrentSegmentIndex(0);
+      setPhase('PREP');
     } else if (currentSectionIndex < set.sections.length - 1) {
       setCurrentSectionIndex(prev => prev + 1);
       setCurrentPartIndex(0);
+      setCurrentSegmentIndex(0);
+      setPhase('PREP');
+      setViewState('INTRO'); // Show intro for next section
     } else {
       finishTest();
     }
-  };
-
-  const handleReviewContinue = () => {
-     setShowReview(false);
-     if (currentSectionIndex < set.sections.length - 1) {
-        setCurrentSectionIndex(prev => prev + 1);
-        setCurrentPartIndex(0);
-     } else {
-        finishTest();
-     }
   };
 
   const finishTest = async () => {
@@ -1061,59 +1450,287 @@ const TestRunner: React.FC<{
     let correctQuestions = 0;
 
     set.sections.forEach(sec => {
-      if (sec.type === 'READING') {
+      if (sec.type === 'READING' || sec.type === 'LISTENING') {
         let secScore = 0;
         sec.parts.forEach(p => {
-          p.questions.forEach(q => {
-            // Only count MCQs and CLOZE definitions as scorable questions
-            if (q.type !== 'PASSAGE') {
-              totalQuestions++;
-              if (answers[q.id] === q.correctAnswer) {
-                secScore += q.weight;
-                correctQuestions++;
-              }
-            }
-          });
+            // Include Segment questions for Listening
+            const allQuestions = [...p.questions, ...(p.segments?.flatMap(s => s.questions) || [])];
+            allQuestions.forEach(q => {
+                if (q.type !== 'PASSAGE') {
+                    totalQuestions++;
+                    if (answers[q.id] === q.correctAnswer) {
+                        secScore += q.weight;
+                        correctQuestions++;
+                    }
+                }
+            });
         });
         scores[sec.id] = secScore;
       }
-      if (sec.type === 'WRITING') scores[sec.id] = 10; 
+      if (sec.type === 'WRITING') scores[sec.id] = 10;
+      if (sec.type === 'SPEAKING') scores[sec.id] = 10; 
     });
 
     const results = { sectionScores: scores, totalCorrect: correctQuestions, totalPossible: totalQuestions };
     onComplete(results);
   };
 
-  // Logic to calculate numbering for displayed questions (skipping Passages)
-  // We need to calculate this once upfront so numbers are consistent
-  let questionCounter = 0;
-  const numberedQuestions = part ? part.questions.map((q: any) => {
-     if (q.type !== 'PASSAGE') {
-        questionCounter++;
-        return { ...q, displayNum: questionCounter };
-     }
-     return { ...q, displayNum: null };
-  }) : [];
+  const formatTime = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
 
-  // Helper to safely render plain text or HTML content for the main left pane
   const renderMainContent = (content: string) => {
-      // Simple heuristic: if it contains HTML tags, render as HTML.
-      // Otherwise render as text with line breaks converted.
       if (content.includes('<') && content.includes('>')) {
           return <div className="prose prose-slate max-w-none text-slate-800 leading-relaxed font-serif text-lg" dangerouslySetInnerHTML={{ __html: content }} />;
       }
       return <div className="prose prose-slate max-w-none text-slate-800 leading-relaxed font-serif text-lg whitespace-pre-wrap">{content}</div>;
   };
 
-  if (showReview) {
-     return <SectionReview section={section} answers={answers} onContinue={handleReviewContinue} />;
+  if (viewState === 'INTRO') {
+     return <SectionIntro title={section.title} type={section.type} onStart={() => setViewState('TEST')} />;
+  }
+
+  if (viewState === 'REVIEW') {
+     return <SectionReview section={section} answers={answers} onContinue={() => {
+         if (currentSectionIndex < set.sections.length - 1) {
+            setCurrentSectionIndex(prev => prev + 1);
+            setCurrentPartIndex(0);
+            setViewState('INTRO');
+         } else {
+            finishTest();
+         }
+     }} />;
   }
 
   if (!section || !part) return <div>Loading...</div>;
 
+  // --- SPEAKING RENDER (SEGMENT BASED) ---
+  if (section.type === 'SPEAKING') {
+     if (!segment) return <div>Invalid Speaking Segment Data</div>;
+
+     return (
+        <div className="h-screen flex flex-col bg-white">
+           <header className="bg-slate-900 text-white px-6 py-3 flex justify-between items-center shadow-lg z-20">
+                <div>
+                  <h2 className="text-lg font-bold tracking-wide">SPEAKING TEST</h2>
+                  <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
+                     <span>Part {currentPartIndex + 1}</span>
+                     <span>•</span>
+                     <span className="text-purple-400 font-bold">Task {currentSegmentIndex + 1} of {part.segments?.length || 0}</span>
+                     <span>•</span>
+                     <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${phase === 'PREP' ? 'bg-blue-600 text-white' : 'bg-red-600 text-white animate-pulse'}`}>
+                         {phase === 'PREP' ? 'Prep Time' : 'Recording'}
+                     </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-6">
+                   <div className={`text-xl font-mono font-bold bg-slate-800 px-3 py-1 rounded ${timeLeft < 10 ? 'text-red-400' : 'text-emerald-400'}`}>
+                     {formatTime(timeLeft)}
+                   </div>
+                   <Button variant="danger" size="sm" onClick={onExit} className="opacity-80 hover:opacity-100">Exit</Button>
+                   <Button 
+                     variant="primary" 
+                     onClick={handleAutoAdvance} 
+                     className="bg-blue-600 hover:bg-blue-500 font-bold px-6"
+                   >
+                     Next &rarr;
+                   </Button>
+                </div>
+            </header>
+            
+            <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 p-8">
+               <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 h-full max-h-[600px]">
+                  {/* Prompt Side */}
+                  <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 overflow-y-auto">
+                      <div className="mb-4">
+                         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Instructions</h3>
+                         {/* Show Part instructions or default */}
+                         <p className="text-sm font-medium text-slate-800">{part.instructions || "Speak about the topic below."}</p>
+                      </div>
+                      <div className="prose prose-lg text-slate-900">
+                          {renderMainContent(segment.contentText || '')}
+                      </div>
+                      {/* Show Segment audio if exists */}
+                      {segment.audioData && (
+                          <div className="mt-4 p-4 bg-slate-50 rounded border border-slate-200">
+                              <p className="text-xs font-bold text-slate-500 mb-1 uppercase">Audio Prompt</p>
+                              <audio controls src={segment.audioData} className="w-full h-8" />
+                          </div>
+                      )}
+                  </div>
+
+                  {/* Recording Side */}
+                  <div className="flex flex-col items-center justify-center bg-white p-8 rounded-2xl shadow-sm border border-slate-200 text-center">
+                      <div className={`relative w-48 h-48 rounded-full flex items-center justify-center mb-8 transition-all duration-300 ${phase === 'RECORDING' ? 'bg-red-50 border-4 border-red-100' : 'bg-slate-50 border-4 border-slate-100'}`}>
+                         {phase === 'RECORDING' && (
+                             <div className="absolute inset-0 rounded-full border-4 border-red-500 opacity-20 animate-ping"></div>
+                         )}
+                         <svg className={`w-20 h-20 transition-colors duration-300 ${phase === 'RECORDING' ? 'text-red-500' : 'text-slate-300'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+                      </div>
+
+                      <h2 className="text-3xl font-bold text-slate-800 mb-2">
+                         {phase === 'PREP' ? 'Prepare Your Response' : 'Recording In Progress'}
+                      </h2>
+                      <p className="text-slate-500 max-w-xs mx-auto">
+                         {phase === 'PREP' ? 'Use this time to think about what you want to say.' : 'Speak clearly into your microphone.'}
+                      </p>
+
+                      {phase === 'RECORDING' && (
+                         <div className="mt-8 flex gap-1 justify-center h-8 items-end">
+                            {[...Array(5)].map((_, i) => (
+                               <div key={i} className="w-2 bg-red-400 rounded-full animate-bounce" style={{ height: '20px', animationDelay: `${i * 0.1}s` }}></div>
+                            ))}
+                         </div>
+                      )}
+                  </div>
+               </div>
+            </div>
+        </div>
+     );
+  }
+
+  // --- LISTENING RENDER ---
+  if (section.type === 'LISTENING') {
+      if (!segment) return <div>Invalid Segment Data</div>;
+
+      return (
+        <div className="h-screen flex flex-col bg-white">
+            <header className="bg-slate-900 text-white px-6 py-3 flex justify-between items-center shadow-lg z-20">
+                <div>
+                  <h2 className="text-lg font-bold tracking-wide">LISTENING TEST</h2>
+                  <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
+                     <span>Part {currentPartIndex + 1}</span>
+                     <span>•</span>
+                     <span className="text-amber-400 font-bold">Segment {currentSegmentIndex + 1} of {part.segments?.length || 0}</span>
+                     <span>•</span>
+                     <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${phase === 'PREP' ? 'bg-blue-600 text-white' : 'bg-red-600 text-white animate-pulse'}`}>
+                         {phase === 'PREP' ? 'Prep Time' : 'On Air'}
+                     </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-6">
+                   {/* Volume Control */}
+                   <div className="flex items-center gap-2 mr-4">
+                      <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                      <input 
+                         type="range" 
+                         min="0" 
+                         max="1" 
+                         step="0.1" 
+                         value={volume} 
+                         onChange={(e) => setVolume(parseFloat(e.target.value))}
+                         className="w-24 h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                      />
+                   </div>
+
+                   <div className={`text-xl font-mono font-bold bg-slate-800 px-3 py-1 rounded ${timeLeft < 10 ? 'text-red-400' : 'text-emerald-400'}`}>
+                     {formatTime(timeLeft)}
+                   </div>
+                   <Button variant="danger" size="sm" onClick={onExit} className="opacity-80 hover:opacity-100">Exit</Button>
+                   <Button 
+                     variant="primary" 
+                     onClick={handleAutoAdvance} // Manual advance functionality
+                     className="bg-blue-600 hover:bg-blue-500 font-bold px-6"
+                   >
+                     Next &rarr;
+                   </Button>
+                </div>
+            </header>
+
+            <div className="flex-1 flex overflow-hidden">
+                {/* LEFT PANE: Instructions & Audio */}
+                <div className="w-1/2 p-10 overflow-y-auto bg-slate-50 border-r border-slate-200 flex flex-col items-center">
+                    <div className="w-full max-w-xl">
+                        {/* Part Instructions */}
+                        {part.instructions && (
+                             <div className="bg-white border border-slate-200 p-4 rounded-lg mb-8 shadow-sm text-slate-700 text-sm font-medium">
+                                 {part.instructions}
+                             </div>
+                        )}
+
+                        {/* Audio Visualization / Status */}
+                        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 mb-8 flex flex-col items-center text-center">
+                            <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 transition-all duration-500 ${phase === 'WORKING' ? 'bg-amber-100 text-amber-600 scale-110 shadow-lg shadow-amber-100 animate-pulse' : 'bg-slate-100 text-slate-300'}`}>
+                                <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-800 mb-2">
+                                {phase === 'PREP' ? 'Prepare to Listen' : 'Listening in Progress'}
+                            </h3>
+                            <p className="text-sm text-slate-500 mb-4">
+                                {phase === 'PREP' ? 'Read the questions carefully.' : 'Listen to the audio and answer the questions.'}
+                            </p>
+                            
+                            {/* Hidden Audio Player - Auto-controlled */}
+                            <audio 
+                                ref={audioRef} 
+                                src={segment.audioData} 
+                                className="w-full h-8 opacity-50 pointer-events-none" 
+                                controls={false} // Disable controls
+                            />
+                        </div>
+
+                        {/* Segment Text Content */}
+                        {segment.contentText && (
+                            <div className="prose prose-sm prose-slate max-w-none bg-white p-6 rounded-lg border border-slate-200">
+                                {renderMainContent(segment.contentText)}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* RIGHT PANE: Questions */}
+                <div className="w-1/2 p-10 overflow-y-auto bg-white">
+                    <div className="max-w-xl mx-auto space-y-6">
+                        {segment.questions.map((q, i) => (
+                           <div key={q.id} className={`p-5 rounded-xl border transition-all shadow-sm ${phase === 'PREP' ? 'border-slate-100 bg-slate-50' : 'border-slate-200 bg-white hover:border-blue-300 hover:shadow-md'}`}>
+                              <div className="font-semibold text-slate-900 mb-4 flex gap-3 items-start">
+                                <span className="bg-slate-800 text-white w-6 h-6 rounded flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">{i + 1}</span>
+                                <span className="mt-0.5">{q.text}</span>
+                              </div>
+                              <div className="space-y-2 ml-9">
+                                  {q.options?.map((opt: string, oIdx: number) => (
+                                    <label key={oIdx} className="flex items-start gap-3 cursor-pointer group/opt p-2 rounded hover:bg-slate-50 transition-colors">
+                                      <div className="relative flex items-center mt-0.5">
+                                        <input 
+                                          type="radio" 
+                                          name={q.id} 
+                                          className="peer h-4 w-4 border-slate-300 text-blue-600 focus:ring-blue-500"
+                                          checked={answers[q.id] === opt}
+                                          onChange={() => setAnswers(prev => ({ ...prev, [q.id]: opt }))}
+                                        />
+                                      </div>
+                                      <span className="text-slate-700 peer-checked:text-blue-700 font-medium">{opt}</span>
+                                    </label>
+                                  ))}
+                              </div>
+                           </div>
+                        ))}
+                        {segment.questions.length === 0 && (
+                            <div className="text-center py-12 text-slate-400 text-sm">
+                                No questions for this segment. Just listen.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+      );
+  }
+
+  // --- READING / WRITING RENDER (STANDARD) ---
+  let questionDisplayCounter = 0;
+  const numberedQuestions = part ? part.questions.map((q: any) => {
+     if (q.type !== 'PASSAGE') {
+        questionDisplayCounter++;
+        return { ...q, displayNum: questionDisplayCounter };
+     }
+     return { ...q, displayNum: null };
+  }) : [];
+
   return (
     <div className="h-screen flex flex-col bg-white">
-      {/* Test Header */}
       <header className="bg-slate-900 text-white px-6 py-3 flex justify-between items-center shadow-lg z-20">
         <div>
           <h2 className="text-lg font-bold tracking-wide">{section.type} SECTION</h2>
@@ -1134,9 +1751,7 @@ const TestRunner: React.FC<{
         </div>
       </header>
 
-      {/* Split Pane Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Pane: Instructions -> Text -> Image */}
         <div className="w-1/2 p-8 overflow-y-auto border-r border-slate-200 bg-slate-50 scroll-smooth">
            <div className="mb-8">
              {part.instructions && (
@@ -1156,7 +1771,6 @@ const TestRunner: React.FC<{
            </div>
         </div>
 
-        {/* Right Pane: Questions (MCQ) and Passages */}
         <div className="w-1/2 p-8 overflow-y-auto bg-white scroll-smooth relative">
            {section.type === 'READING' ? (
              <div className="space-y-6 pb-12">
@@ -1174,9 +1788,8 @@ const TestRunner: React.FC<{
                       );
                    }
                    if (q.type === 'CLOZE') {
-                      return null; // Don't render cloze definitions directly in list
+                      return null;
                    }
-                   // Standard MCQ
                    return (
                       <div key={q.id} className="p-5 rounded-xl border border-slate-100 hover:border-blue-200 transition-all shadow-sm hover:shadow-md bg-white group">
                         <div className="font-semibold text-slate-900 mb-4 flex gap-3 items-start">
@@ -1225,277 +1838,156 @@ const TestRunner: React.FC<{
   );
 };
 
-// 6. USER DASHBOARD
-const UserDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'practice' | 'progress'>('practice');
-  const [view, setView] = useState<'HOME' | 'TEST'>('HOME');
-  const [selectedSet, setSelectedSet] = useState<PracticeSet | null>(null);
-  const [history, setHistory] = useState<Attempt[]>([]);
+const UserDashboard: React.FC<{ user: User; onLogout: () => void; onStartTest: (set: PracticeSet) => void }> = ({ user, onLogout, onStartTest }) => {
   const [sets, setSets] = useState<PracticeSet[]>([]);
-
-  // Selection Modal State
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [configSet, setConfigSet] = useState<PracticeSet | null>(null);
-  const [selectedSections, setSelectedSections] = useState<Set<string>>(new Set());
+  const [attempts, setAttempts] = useState<Attempt[]>([]);
 
   useEffect(() => {
-    API.getAttempts(user.id).then(setHistory);
-    API.getSets().then((data) => {
-      setSets(data.filter(s => s.isPublished));
-    });
-  }, [user.id, view]);
+    API.getSets().then(data => setSets(data.filter(s => s.isPublished)));
+    API.getAttempts(user.id).then(data => setAttempts(data));
+  }, [user.id]);
 
-  // Handle clicking "Start Practice"
-  const openConfigModal = (set: PracticeSet) => {
-    setConfigSet(set);
-    // Default: Select all sections
-    setSelectedSections(new Set(set.sections.map(s => s.id)));
-    setIsModalOpen(true);
-  };
-
-  const toggleSection = (sectionId: string) => {
-    const newSelection = new Set(selectedSections);
-    if (newSelection.has(sectionId)) {
-      newSelection.delete(sectionId);
-    } else {
-      newSelection.add(sectionId);
-    }
-    setSelectedSections(newSelection);
-  };
-
-  const startTest = () => {
-    if (!configSet) return;
-    
-    // Filter the set to only include selected sections
-    const filteredSections = configSet.sections.filter(s => selectedSections.has(s.id));
-    
-    // Create a runtime copy of the set with only selected sections
-    const runtimeSet = {
-      ...configSet,
-      sections: filteredSections
-    };
-
-    setSelectedSet(runtimeSet);
-    setIsModalOpen(false);
-    setView('TEST');
-  };
-
-  const handleTestComplete = async (results: any) => {
-    // Only happens if selectedSet is not null
-    if (!selectedSet) return;
-
-    const newAttempt: Attempt = {
-      id: `att-${Date.now()}`,
-      userId: user.id,
-      setId: selectedSet.id,
-      setTitle: selectedSet.title,
-      date: new Date().toLocaleDateString(),
-      sectionScores: results.sectionScores,
-      bandScore: Math.min(12, Math.round((results.totalCorrect / results.totalPossible) * 12) || 0)
-    };
-    
-    await API.saveAttempt(newAttempt);
-    setView('HOME');
-    setSelectedSet(null);
-  };
-
-  if (view === 'TEST' && selectedSet) {
-    return <TestRunner set={selectedSet} onComplete={handleTestComplete} onExit={() => setView('HOME')} />;
-  }
-
-  // Helper to resolve section type from loaded sets for chart visualization
-  const getSectionType = (setId: string, sectionId: string) => {
-    const set = sets.find(s => s.id === setId);
-    const sec = set?.sections.find(s => s.id === sectionId);
-    return sec?.type;
-  };
-
-  // Prepare chart data with individual section trends
-  // Data structure: [{ date: '...', READING: 10, WRITING: 8 }, ...]
-  const chartData = history.map(h => {
-    const point: any = { date: h.date, name: h.setTitle };
-    Object.entries(h.sectionScores).forEach(([secId, score]) => {
-      const type = getSectionType(h.setId, secId);
-      if (type) {
-        // Plotting raw score for now as band conversion happens elsewhere or needs schema update
-        point[type] = score;
-      }
-    });
-    return point;
-  }).reverse(); // Sort oldest to newest
+  // Reverse attempts for the chart (chronological order)
+  const chartData = [...attempts].reverse();
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans">
-      <nav className="bg-white shadow-sm border-b border-slate-200 px-6 py-4 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">CP</div>
-            <h1 className="font-bold text-xl text-slate-900 tracking-tight">CELPrep Master</h1>
-          </div>
-          <div className="flex items-center gap-4">
-             <span className="text-sm font-medium text-slate-600 hidden sm:block">Welcome, {user.name}</span>
-             <Button variant="outline" size="sm" onClick={onLogout}>Sign Out</Button>
-          </div>
+    <div className="min-h-screen bg-slate-50 p-6">
+       <header className="flex justify-between items-center mb-8 max-w-6xl mx-auto bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">Welcome, {user.name}</h1>
+          <p className="text-xs text-slate-500">Candidate Dashboard</p>
         </div>
-      </nav>
+        <Button variant="outline" size="sm" onClick={onLogout}>Logout</Button>
+      </header>
 
-      {/* TABS NAVIGATION */}
-      <div className="bg-white border-b border-slate-200">
-         <div className="max-w-6xl mx-auto px-6 flex gap-8">
-            <button 
-              onClick={() => setActiveTab('practice')}
-              className={`py-4 text-sm font-bold border-b-2 transition-colors ${activeTab === 'practice' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-            >
-              Practice Sets
-            </button>
-            <button 
-              onClick={() => setActiveTab('progress')}
-              className={`py-4 text-sm font-bold border-b-2 transition-colors ${activeTab === 'progress' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-            >
-              My Progress
-            </button>
-         </div>
-      </div>
-
-      <main className="max-w-6xl mx-auto p-6 space-y-10 pb-20">
-        
-        {/* TAB: MY PROGRESS */}
-        {activeTab === 'progress' && (
-          <section className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="flex justify-between items-end mb-6">
-              <div>
-                <h2 className="text-2xl font-bold text-slate-900">Your Progress</h2>
-                <p className="text-slate-500 text-sm mt-1">Track your band scores across different sections over time.</p>
-              </div>
-            </div>
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-96">
-               {chartData.length > 0 ? (
-                 <ResponsiveContainer width="100%" height="100%">
-                   <LineChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                     <XAxis dataKey="date" tick={{fontSize: 12, fill: '#94a3b8'}} axisLine={false} tickLine={false} dy={10} />
-                     <YAxis domain={[0, 12]} tick={{fontSize: 12, fill: '#94a3b8'}} axisLine={false} tickLine={false} />
-                     <Tooltip 
-                        contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
-                     />
-                     <Legend wrapperStyle={{paddingTop: '20px'}} iconType="circle" />
-                     <Line type="monotone" dataKey="READING" stroke="#3b82f6" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
-                     <Line type="monotone" dataKey="WRITING" stroke="#10b981" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
-                     <Line type="monotone" dataKey="LISTENING" stroke="#f59e0b" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
-                     <Line type="monotone" dataKey="SPEAKING" stroke="#8b5cf6" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
-                   </LineChart>
-                 </ResponsiveContainer>
-               ) : (
-                 <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                   <svg className="w-12 h-12 mb-2 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                   <p>No test history available yet.</p>
-                   <p className="text-sm">Complete a test to see your band score trend.</p>
-                 </div>
-               )}
-            </div>
-          </section>
-        )}
-
-        {/* TAB: PRACTICE SETS */}
-        {activeTab === 'practice' && (
-          <section className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-              Available Practice Sets
-              <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">{sets.length}</span>
-            </h2>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {sets.map(set => (
-                <div 
-                  key={set.id} 
-                  className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col hover:shadow-lg transition-all"
-                >
-                  <div className="h-1.5 bg-gradient-to-r from-blue-500 to-purple-500 w-full"></div>
-                  {/* Card Body - Clickable to Start (Opens Modal) */}
-                  <div 
-                    className="p-6 cursor-pointer hover:bg-slate-50 transition-colors flex-1"
-                    onClick={() => openConfigModal(set)}
-                  >
-                    <div className="flex justify-between items-start mb-4">
-                      <span className="px-2 py-1 text-[10px] uppercase font-bold tracking-wider rounded-full bg-green-100 text-green-700">
-                        Ready
-                      </span>
-                    </div>
-                    <h3 className="font-bold text-slate-900 mb-2 truncate">{set.title}</h3>
-                    <p className="text-slate-500 text-xs mb-4 h-10 overflow-hidden">{set.description || 'No description provided.'}</p>
-                    <div className="flex items-center gap-2 pt-2 mt-auto">
-                      <div className="flex -space-x-1 overflow-hidden">
-                         {set.sections.slice(0,4).map((s, i) => (
-                           <div key={i} className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-600">
-                             {s.type[0]}
-                           </div>
-                         ))}
-                      </div>
-                      <span className="text-xs text-slate-400">{set.sections.length} Sections</span>
-                    </div>
-                  </div>
-                  
-                  {/* Card Footer - Actions */}
-                  <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end items-center z-10">
-                     <Button size="sm" onClick={() => openConfigModal(set)}>Start Practice</Button>
-                  </div>
+      <main className="max-w-6xl mx-auto space-y-8">
+         {/* Stats Chart */}
+         {attempts.length > 0 && (
+            <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h2 className="text-lg font-bold text-slate-800 mb-4">Performance Trend</h2>
+                <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={chartData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                            <XAxis dataKey="date" stroke="#64748b" fontSize={12} tickLine={false} />
+                            <YAxis domain={[0, 12]} stroke="#64748b" fontSize={12} tickLine={false} />
+                            <Tooltip 
+                                contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                            />
+                            <Legend />
+                            <Line type="monotone" dataKey="bandScore" stroke="#2563eb" strokeWidth={3} dot={{ r: 4, fill: '#2563eb' }} activeDot={{ r: 6 }} name="Band Score" />
+                        </LineChart>
+                    </ResponsiveContainer>
                 </div>
-              ))}
-            </div>
-          </section>
-        )}
-      </main>
+            </section>
+         )}
 
-      {/* Configuration Modal */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="Configure Your Practice"
-      >
-         <div className="space-y-4">
-            <p className="text-sm text-slate-500">
-               Select the sections you want to practice for <strong>{configSet?.title}</strong>.
-            </p>
-            <div className="space-y-2 border border-slate-100 bg-slate-50 rounded-lg p-3">
-               {configSet?.sections.map(section => (
-                  <label key={section.id} className="flex items-center p-3 bg-white border border-slate-200 rounded cursor-pointer hover:border-blue-400 transition-colors">
-                     <input 
-                        type="checkbox"
-                        className="w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                        checked={selectedSections.has(section.id)}
-                        onChange={() => toggleSection(section.id)}
-                     />
-                     <div className="ml-3">
-                        <span className="block text-sm font-bold text-slate-700">{section.type}</span>
-                        <span className="block text-xs text-slate-400">{section.title}</span>
-                     </div>
-                  </label>
+         {/* Available Tests */}
+         <section>
+            <h2 className="text-lg font-bold text-slate-800 mb-4">Available Practice Tests</h2>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+               {sets.map(set => (
+                 <div key={set.id} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow flex flex-col">
+                    <h3 className="font-bold text-slate-900 mb-2">{set.title}</h3>
+                    <p className="text-slate-500 text-xs mb-4 flex-1">{set.description}</p>
+                    <div className="flex items-center justify-between mt-4">
+                        <span className="text-xs text-slate-400">{set.sections.length} Sections</span>
+                        <Button onClick={() => onStartTest(set)} size="sm">Start Test</Button>
+                    </div>
+                 </div>
                ))}
+               {sets.length === 0 && <p className="text-slate-400 text-sm italic col-span-3 text-center py-8">No practice tests available at the moment.</p>}
             </div>
-            <div className="flex justify-end pt-4 gap-3">
-               <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-               <Button onClick={startTest} disabled={selectedSections.size === 0}>
-                  Start Test ({selectedSections.size} Sections)
-               </Button>
-            </div>
-         </div>
-      </Modal>
+         </section>
+
+         {/* Past Attempts */}
+         <section>
+            <h2 className="text-lg font-bold text-slate-800 mb-4">Attempt History</h2>
+            {attempts.length > 0 ? (
+               <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                  <table className="w-full text-sm text-left">
+                     <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                        <tr>
+                           <th className="px-6 py-3">Date</th>
+                           <th className="px-6 py-3">Test</th>
+                           <th className="px-6 py-3">Scores (Sec)</th>
+                           <th className="px-6 py-3">Band</th>
+                        </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-100">
+                        {attempts.map(att => (
+                           <tr key={att.id} className="hover:bg-slate-50/50">
+                              <td className="px-6 py-3 text-slate-600">{att.date}</td>
+                              <td className="px-6 py-3 font-medium text-slate-900">{att.setTitle}</td>
+                              <td className="px-6 py-3 text-slate-600">
+                                 {att.sectionScores && Object.entries(att.sectionScores).map(([secId, score]) => (
+                                    <span key={secId} className="mr-2 text-[10px] bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-slate-500">
+                                       {score} pts
+                                    </span>
+                                 ))}
+                              </td>
+                              <td className="px-6 py-3 font-bold text-blue-600">{att.bandScore || '-'}</td>
+                           </tr>
+                        ))}
+                     </tbody>
+                  </table>
+               </div>
+            ) : (
+               <p className="text-slate-400 text-sm">No attempts yet.</p>
+            )}
+         </section>
+      </main>
     </div>
   );
 };
 
-// 7. ROOT COMPONENT
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
+  const [activeSet, setActiveSet] = useState<PracticeSet | null>(null);
 
   if (!user) {
     return <LoginScreen onLogin={setUser} />;
+  }
+
+  if (activeSet) {
+    return (
+      <TestRunner 
+        set={activeSet} 
+        onExit={() => {
+            if (window.confirm("Are you sure you want to exit? Your progress will be lost.")) {
+                setActiveSet(null);
+            }
+        }}
+        onComplete={async (results) => {
+           // Calculate rough band score (mock logic)
+           // CELPIP is roughly: 10-12 points = 10-12 band. 
+           // This is just a placeholder calculation.
+           const totalCorrect = results.totalCorrect;
+           const bandScore = Math.min(12, Math.round(totalCorrect / 5) + 3); // Very rough approximation
+           
+           const attempt: Attempt = {
+              id: `att-${Date.now()}`,
+              userId: user.id,
+              setId: activeSet.id,
+              setTitle: activeSet.title,
+              date: new Date().toLocaleDateString(),
+              sectionScores: results.sectionScores,
+              bandScore
+           };
+           
+           await API.saveAttempt(attempt);
+           alert(`Test Completed!\nEstimated Band Score: ${bandScore}`);
+           setActiveSet(null);
+        }}
+      />
+    );
   }
 
   if (user.role === 'admin') {
     return <AdminDashboard user={user} onLogout={() => setUser(null)} />;
   }
 
-  return <UserDashboard user={user} onLogout={() => setUser(null)} />;
+  return <UserDashboard user={user} onLogout={() => setUser(null)} onStartTest={setActiveSet} />;
 };
 
 export default App;

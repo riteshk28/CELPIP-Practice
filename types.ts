@@ -14,21 +14,37 @@ export type QuestionType = 'MCQ' | 'CLOZE' | 'PASSAGE';
 export interface Question {
   id: string;
   partId: string;
-  text: string; // For Cloze, this corresponds to the placeholder ID (e.g., "1"). For Passage, this is the content.
+  segmentId?: string; // NEW: For questions belonging to a specific segment (Listening)
+  text: string; 
   type: QuestionType;
-  options?: string[]; // For MCQ/Cloze
-  correctAnswer?: string; // For auto-grading
+  options?: string[]; 
+  correctAnswer?: string; 
   weight: number;
+}
+
+// NEW: A Segment is a sub-unit of a Part (e.g., one audio track + questions)
+export interface Segment {
+  id: string;
+  partId: string;
+  title?: string;
+  contentText?: string; // Instructions or text prompt
+  audioData?: string; // Base64 or URL
+  prepTimeSeconds: number; // Time to read questions before audio
+  timerSeconds: number; // Time for audio + answering
+  questions: Question[];
 }
 
 export interface Part {
   id: string;
   sectionId: string;
-  contentText: string; // Main Passage (Left Side)
-  imageData?: string; // Base64
+  contentText: string; 
+  imageData?: string; 
   instructions?: string;
-  questions: Question[]; // Now contains MCQs, CLOZE definitions, AND PASSAGE blocks mixed
-  timerSeconds: number; // Duration for this specific part
+  // Reading/Writing use 'questions' directly. Listening uses 'segments'.
+  questions: Question[]; 
+  segments?: Segment[]; // NEW: Container for Listening segments
+  prepTimeSeconds?: number; // NEW: Specific for Speaking Parts
+  timerSeconds: number; 
 }
 
 export interface Section {
@@ -53,7 +69,7 @@ export interface Attempt {
   setId: string;
   setTitle: string;
   date: string;
-  sectionScores: Record<string, number>; // SectionId -> Score
+  sectionScores: Record<string, number>; 
   bandScore?: number;
 }
 

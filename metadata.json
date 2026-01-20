@@ -1,5 +1,7 @@
 {
   "name": "CELPrep Master",
   "description": "A comprehensive CELPIP preparation platform for Reading, Writing, Listening, and Speaking practice.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "microphone"
+  ]
 }

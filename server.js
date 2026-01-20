@@ -67,6 +67,7 @@ app.post('/api/signup', async (req, res) => {
 // 3. GET SETS
 app.get('/api/sets', async (req, res) => {
   try {
+    // This query constructs the nested JSON object: Set -> Sections -> Parts -> (Segments -> Questions) OR (Questions)
     const query = `
       SELECT 
         s.id, s.title, s.description, s.is_published as "isPublished",
@@ -84,16 +85,40 @@ app.get('/api/sets', async (req, res) => {
                 'imageData', p.image_data,
                 'instructions', p.instructions,
                 'timerSeconds', COALESCE(p.timer_seconds, 600),
+                'segments', COALESCE((
+                   SELECT json_agg(json_build_object(
+                      'id', seg.id,
+                      'partId', seg.part_id,
+                      'title', seg.title,
+                      'contentText', seg.content_text,
+                      'audioData', seg.audio_data,
+                      'prepTimeSeconds', COALESCE(seg.prep_time_seconds, 0),
+                      'timerSeconds', COALESCE(seg.timer_seconds, 0),
+                      'questions', COALESCE((
+                          SELECT json_agg(json_build_object(
+                            'id', q.id,
+                            'partId', q.part_id,
+                            'segmentId', q.segment_id,
+                            'text', q.question_text,
+                            'type', q.type,
+                            'options', q.options,
+                            'correctAnswer', q.correct_answer,
+                            'weight', q.weight
+                          ) ORDER BY q.order_index ASC) FROM questions q WHERE q.segment_id = seg.id
+                       ), '[]'::json)
+                   ) ORDER BY seg.order_index ASC) FROM segments seg WHERE seg.part_id = p.id
+                ), '[]'::json),
                 'questions', COALESCE((
                   SELECT json_agg(json_build_object(
                     'id', q.id,
                     'partId', q.part_id,
+                    'segmentId', q.segment_id,
                     'text', q.question_text,
                     'type', q.type,
                     'options', q.options,
                     'correctAnswer', q.correct_answer,
                     'weight', q.weight
-                  ) ORDER BY q.order_index ASC) FROM questions q WHERE q.part_id = p.id
+                  ) ORDER BY q.order_index ASC) FROM questions q WHERE q.part_id = p.id AND q.segment_id IS NULL
                 ), '[]'::json)
               ) ORDER BY p.order_index ASC) FROM parts p WHERE p.section_id = sec.id
             ), '[]'::json)
@@ -117,6 +142,7 @@ app.post('/api/sets', async (req, res) => {
   try {
     await client.query('BEGIN');
     
+    // Simple replace strategy: delete entire set and recreate
     await client.query('DELETE FROM practice_sets WHERE id = $1', [set.id]);
     
     await client.query(
@@ -138,8 +164,30 @@ app.post('/api/sets', async (req, res) => {
           [part.id, sec.id, part.contentText, part.imageData, part.instructions, part.timerSeconds, partOrder++]
         );
 
+        // Handle Segments (Listening)
+        if (part.segments && part.segments.length > 0) {
+            let segOrder = 0;
+            for (const seg of part.segments) {
+                await client.query(
+                   'INSERT INTO segments (id, part_id, title, content_text, audio_data, prep_time_seconds, timer_seconds, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+                   [seg.id, part.id, seg.title, seg.contentText, seg.audioData, seg.prepTimeSeconds, seg.timerSeconds, segOrder++]
+                );
+
+                // Questions belonging to Segment
+                let qOrder = 0;
+                for (const q of seg.questions) {
+                  await client.query(
+                    'INSERT INTO questions (id, part_id, segment_id, question_text, type, options, correct_answer, weight, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+                    [q.id, part.id, seg.id, q.text, q.type, JSON.stringify(q.options || []), q.correctAnswer, q.weight, qOrder++]
+                  );
+                }
+            }
+        }
+
+        // Handle Direct Questions (Reading/Writing)
         let qOrder = 0;
         for (const q of part.questions) {
+          // Skip if it somehow has a segmentId but is in the top-level list, though that shouldn't happen with clean state
           await client.query(
             'INSERT INTO questions (id, part_id, question_text, type, options, correct_answer, weight, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
             [q.id, part.id, q.text, q.type, JSON.stringify(q.options || []), q.correctAnswer, q.weight, qOrder++]
