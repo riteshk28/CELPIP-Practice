@@ -1266,8 +1266,31 @@ const WritingEvaluationView: React.FC<{
     onExit: () => void;
 }> = ({ section, aiFeedback, onExit }) => {
     // Calculate average band score
-    const scores = Object.values(aiFeedback).map(f => f.bandScore);
+    const scores = Object.values(aiFeedback).map((f: WritingEvaluation) => f.bandScore);
     const averageScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+
+    // Helper to render simple text with bold markers (**text**) and headers (### text)
+    const renderFormattedText = (text: string) => {
+        if (!text) return null;
+        return text.split('\n').map((line, i) => {
+            // Header detection
+            if (line.startsWith('###')) {
+                return <h5 key={i} className="text-sm font-bold text-slate-800 uppercase tracking-wide mt-4 mb-2">{line.replace(/^###\s*/, '')}</h5>;
+            }
+            // Simple bold parsing
+            const parts = line.split(/(\*\*.*?\*\*)/g);
+            return (
+                <p key={i} className="mb-2 text-sm leading-relaxed text-slate-700">
+                    {parts.map((part, j) => {
+                        if (part.startsWith('**') && part.endsWith('**')) {
+                            return <strong key={j} className="font-semibold text-slate-900">{part.slice(2, -2)}</strong>;
+                        }
+                        return part;
+                    })}
+                </p>
+            );
+        });
+    };
 
     return (
         <div className="h-screen flex flex-col bg-slate-50">
@@ -1300,16 +1323,15 @@ const WritingEvaluationView: React.FC<{
                             </div>
                             <div className="p-6 grid md:grid-cols-2 gap-8">
                                 <div>
-                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Feedback Analysis</h4>
-                                    <div className="prose prose-sm prose-slate max-w-none text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-100">
-                                        {/* Simple formatting for feedback which might contain newlines */}
-                                        {feedback.feedback.split('\n').map((line, i) => <p key={i} className="mb-2">{line}</p>)}
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 border-b border-slate-100 pb-2">Examiner Feedback</h4>
+                                    <div className="bg-slate-50 p-5 rounded-lg border border-slate-100 h-full">
+                                        {renderFormattedText(feedback.feedback)}
                                     </div>
                                 </div>
                                 <div>
-                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Suggested Improvements</h4>
-                                    <div className="prose prose-sm prose-amber max-w-none text-amber-900 bg-amber-50 p-4 rounded-lg border border-amber-100">
-                                        {feedback.corrections.split('\n').map((line, i) => <p key={i} className="mb-2">{line}</p>)}
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 border-b border-slate-100 pb-2">Corrections & Improvements</h4>
+                                    <div className="bg-amber-50 p-5 rounded-lg border border-amber-100 h-full text-amber-900">
+                                        {renderFormattedText(feedback.corrections)}
                                     </div>
                                 </div>
                             </div>
@@ -1476,7 +1498,7 @@ const TestRunner: React.FC<{
           // If multiple parts, average the band score.
           const partScores = sec.parts.map(p => {
              const feedback = aiFeedback[p.id];
-             return feedback ? feedback.bandScore : 0;
+             return feedback ? (feedback as WritingEvaluation).bandScore : 0;
           }).filter((s: number) => s > 0);
           
           const avg = partScores.length > 0 ? Math.round(partScores.reduce((a, b) => a + b, 0) / partScores.length) : 0;

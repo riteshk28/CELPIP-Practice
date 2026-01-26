@@ -233,23 +233,30 @@ app.post('/api/evaluate-writing', async (req, res) => {
 
   try {
     const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `You are a strict CELPIP Writing Examiner.
+        model: 'gemini-3-pro-preview',
+        contents: `You are an expert CELPIP Examiner. Evaluate the student response based on the official 4 CELPIP categories.
         
-        === CONTEXT / PROMPT ===
+        === PROMPT ===
         ${questionText}
 
-        === STUDENT RESPONSE TO EVALUATE ===
+        === STUDENT RESPONSE ===
         ${userResponse}
 
-        === INSTRUCTIONS ===
-        Evaluate the student response based on CELPIP criteria:
-        1. Content/Coherence (Quality of ideas, organization)
-        2. Vocabulary (Range and accuracy)
-        3. Readability/Grammar (Sentence structure, errors)
-        4. Task Fulfillment (Did they answer the prompt?)
+        === EVALUATION CRITERIA ===
+        1. **Content/Coherence**: Number of ideas, quality of ideas, organization, transitions, paragraphing.
+        2. **Vocabulary**: Word choice, range, precision, naturalness.
+        3. **Readability**: Grammar, punctuation, spelling, sentence structure variety.
+        4. **Task Fulfillment**: Word count compliance, tone appropriateness, addressing all task bullets.
 
-        Return ONLY a JSON object. Do not wrap it in markdown.
+        === OUTPUT FORMAT INSTRUCTIONS ===
+        You must return valid JSON.
+        
+        Fields:
+        - bandScore: An integer from 0 to 12.
+        - feedback: A formatted string using simple Markdown headers (###) for each category. Be very specific about what they did well and what they missed. Example: "### Vocabulary\nGood use of..."
+        - corrections: A formatted string listing specific errors. Use the format: "**Original Text** -> **Better Version**: Explanation". separating each error with a newline.
+
+        Be strict but constructive. Identify major grammatical errors.
         `,
         config: {
             responseMimeType: "application/json",
@@ -257,8 +264,8 @@ app.post('/api/evaluate-writing', async (req, res) => {
                 type: Type.OBJECT,
                 properties: {
                     bandScore: { type: Type.NUMBER, description: "CELPIP Level 0-12" },
-                    feedback: { type: Type.STRING, description: "Detailed feedback on strengths and weaknesses." },
-                    corrections: { type: Type.STRING, description: "A corrected version of the text or specific grammar fixes." }
+                    feedback: { type: Type.STRING, description: "Detailed Markdown feedback categorized by criteria." },
+                    corrections: { type: Type.STRING, description: "List of specific errors and improvements." }
                 }
             }
         }
