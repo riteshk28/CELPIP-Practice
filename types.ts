@@ -49,6 +49,12 @@ export interface PracticeSet {
   sections: Section[];
 }
 
+export interface WritingEvaluation {
+    bandScore: number;
+    feedback: string;
+    corrections: string;
+}
+
 export interface Attempt {
   id: string;
   userId: string;
@@ -57,6 +63,7 @@ export interface Attempt {
   date: string;
   sectionScores: Record<string, number>; // SectionId -> Score
   bandScore?: number;
+  aiFeedback?: Record<string, WritingEvaluation>; // PartID -> Evaluation
 }
 
 export interface AppState {

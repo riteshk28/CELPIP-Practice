@@ -1,8 +1,8 @@
-
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const { GoogleGenAI, Type } = require("@google/genai");
 
 const app = express();
 const port = 3001;
@@ -15,6 +15,10 @@ app.use(bodyParser.json({ limit: '50mb' }));
 const pool = new Pool({
   connectionString: 'postgresql://neondb_owner:npg_LQglPOITy69A@ep-steep-wildflower-ahck6uyl-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require',
 });
+
+// Initialize Gemini Client
+// Note: In local development, ensure process.env.API_KEY is set or passed when running the server
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 
 // --- ROUTES ---
 
@@ -176,8 +180,8 @@ app.post('/api/attempts', async (req, res) => {
   const att = req.body;
   try {
     await pool.query(
-      'INSERT INTO user_attempts (id, user_id, set_id, section_scores, total_band_score, completed_at) VALUES ($1, $2, $3, $4, $5, $6)',
-      [att.id, att.userId, att.setId, JSON.stringify(att.sectionScores), att.bandScore, new Date()]
+      'INSERT INTO user_attempts (id, user_id, set_id, section_scores, total_band_score, completed_at, ai_feedback) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [att.id, att.userId, att.setId, JSON.stringify(att.sectionScores), att.bandScore, new Date(), JSON.stringify(att.aiFeedback || {})]
     );
     res.json({ success: true });
   } catch (err) {
@@ -204,11 +208,61 @@ app.get('/api/attempts/:userId', async (req, res) => {
       setTitle: row.set_title || 'Unknown Set',
       date: new Date(row.completed_at).toLocaleDateString(),
       sectionScores: row.section_scores,
-      bandScore: parseFloat(row.total_band_score)
+      bandScore: parseFloat(row.total_band_score),
+      aiFeedback: row.ai_feedback || {}
     }));
     res.json(attempts);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// 8. EVALUATE WRITING (New Endpoint)
+app.post('/api/evaluate-writing', async (req, res) => {
+  const { questionText, userResponse } = req.body;
+  
+  // If no API key configured, return mock data to prevent crash
+  if (!process.env.API_KEY) {
+      return res.json({
+          bandScore: 7,
+          feedback: "API Key missing. This is a mock evaluation.\n\nYour writing is clear but needs better vocabulary.",
+          corrections: "Ensure the Gemini API Key is set in Vercel environment variables."
+      });
+  }
+
+  try {
+    const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `You are a strict CELPIP Writing Examiner. Evaluate the following response.
+        
+        Task/Question:
+        ${questionText}
+
+        Student Response:
+        ${userResponse}
+
+        Provide a structured evaluation based on CELPIP criteria (Content/Coherence, Vocabulary, Listenability/Grammar, Task Fulfillment).
+        Return the response in JSON format.`,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    bandScore: { type: Type.NUMBER, description: "CELPIP Level 0-12" },
+                    feedback: { type: Type.STRING, description: "Detailed feedback on strengths and weaknesses." },
+                    corrections: { type: Type.STRING, description: "A corrected version of the text or specific grammar fixes." }
+                }
+            }
+        }
+    });
+    
+    // Parse JSON
+    const jsonResponse = JSON.parse(response.text);
+    res.json(jsonResponse);
+
+  } catch (err) {
+    console.error("Gemini Error:", err);
+    res.status(500).json({ error: "Failed to evaluate writing." });
   }
 });
 

@@ -1,5 +1,5 @@
 
-import { PracticeSet, Attempt, User } from '../types';
+import { PracticeSet, Attempt, User, WritingEvaluation } from '../types';
 
 // On Vercel, the backend is on the same domain, so we use a relative path.
 const API_URL = '/api';
@@ -100,6 +100,22 @@ export const API = {
     } catch (e) {
       console.error(e);
       return [];
+    }
+  },
+
+  // Evaluate Writing (New)
+  evaluateWriting: async (questionText: string, userResponse: string): Promise<WritingEvaluation | null> => {
+    try {
+        const res = await fetch(`${API_URL}/evaluate-writing`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ questionText, userResponse }),
+        });
+        if (!res.ok) return null;
+        return await res.json();
+    } catch (e) {
+        console.error("Evaluation failed", e);
+        return null;
     }
   }
 };
