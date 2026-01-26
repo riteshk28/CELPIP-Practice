@@ -233,7 +233,7 @@ app.post('/api/evaluate-writing', async (req, res) => {
 
   try {
     const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
+        model: 'gemini-3-flash-preview',
         contents: `You are an expert CELPIP Examiner. Evaluate the student response based on the official 4 CELPIP categories.
         
         === PROMPT ===
