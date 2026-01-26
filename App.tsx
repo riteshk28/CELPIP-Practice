@@ -936,7 +936,7 @@ const PartEditor: React.FC<{
                           {/* CLOZE TYPE */}
                           {q.type === 'CLOZE' && (
                             <div>
-                               <div className="flex items-center gap-2 mb-2">
+                                <div className="flex items-center gap-2 mb-2">
                                   <label className="text-xs font-semibold text-slate-600">ID:</label>
                                   <input 
                                     className="w-20 border border-slate-300 rounded px-2 py-1 text-xs bg-white text-slate-900 focus:ring-1 focus:ring-blue-500"
@@ -1483,7 +1483,7 @@ const TestRunner: React.FC<{
           // Use AI score if available, otherwise default 0
           // Sum up part scores? Average them?
           // If multiple parts, average the band score.
-          const partScores = sec.parts.map(p => (aiFeedback[p.id] as WritingEvaluation | undefined)?.bandScore || 0).filter((s: number) => s > 0);
+          const partScores = sec.parts.map(p => aiFeedback[p.id]?.bandScore || 0).filter((s: number) => s > 0);
           const avg = partScores.length > 0 ? Math.round(partScores.reduce((a, b) => a + b, 0) / partScores.length) : 0;
           scores[sec.id] = avg; 
       }

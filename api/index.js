@@ -16,8 +16,9 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL, 
 });
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+// Initialize Gemini Client Conditionally
+const apiKey = process.env.API_KEY;
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 // --- ROUTES ---
 
@@ -220,7 +221,8 @@ app.get('/api/attempts/:userId', async (req, res) => {
 app.post('/api/evaluate-writing', async (req, res) => {
   const { questionText, userResponse } = req.body;
   
-  if (!process.env.API_KEY) {
+  // Conditionally check initialized AI client instead of process.env directly
+  if (!ai) {
       return res.json({
           bandScore: 7,
           feedback: "API Key missing. This is a mock evaluation.\n\nYour writing is clear but needs better vocabulary.",

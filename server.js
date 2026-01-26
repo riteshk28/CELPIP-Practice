@@ -16,9 +16,10 @@ const pool = new Pool({
   connectionString: 'postgresql://neondb_owner:npg_LQglPOITy69A@ep-steep-wildflower-ahck6uyl-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require',
 });
 
-// Initialize Gemini Client
+// Initialize Gemini Client Conditionally
 // Note: In local development, ensure process.env.API_KEY is set or passed when running the server
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+const apiKey = process.env.API_KEY;
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 // --- ROUTES ---
 
@@ -222,7 +223,7 @@ app.post('/api/evaluate-writing', async (req, res) => {
   const { questionText, userResponse } = req.body;
   
   // If no API key configured, return mock data to prevent crash
-  if (!process.env.API_KEY) {
+  if (!ai) {
       return res.json({
           bandScore: 7,
           feedback: "API Key missing. This is a mock evaluation.\n\nYour writing is clear but needs better vocabulary.",
