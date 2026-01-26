@@ -234,16 +234,23 @@ app.post('/api/evaluate-writing', async (req, res) => {
   try {
     const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `You are a strict CELPIP Writing Examiner. Evaluate the following response.
+        contents: `You are a strict CELPIP Writing Examiner.
         
-        Task/Question:
+        === CONTEXT / PROMPT ===
         ${questionText}
 
-        Student Response:
+        === STUDENT RESPONSE TO EVALUATE ===
         ${userResponse}
 
-        Provide a structured evaluation based on CELPIP criteria (Content/Coherence, Vocabulary, Listenability/Grammar, Task Fulfillment).
-        Return the response in JSON format.`,
+        === INSTRUCTIONS ===
+        Evaluate the student response based on CELPIP criteria:
+        1. Content/Coherence (Quality of ideas, organization)
+        2. Vocabulary (Range and accuracy)
+        3. Readability/Grammar (Sentence structure, errors)
+        4. Task Fulfillment (Did they answer the prompt?)
+
+        Return ONLY a JSON object. Do not wrap it in markdown.
+        `,
         config: {
             responseMimeType: "application/json",
             responseSchema: {
@@ -257,8 +264,19 @@ app.post('/api/evaluate-writing', async (req, res) => {
         }
     });
     
-    // Parse JSON
-    const jsonResponse = JSON.parse(response.text);
+    let text = response.text;
+    if (!text) {
+        throw new Error("Gemini returned empty response. It might have been blocked by safety settings.");
+    }
+
+    // Clean up potential markdown formatting if the model adds it despite mimeType
+    if (text.startsWith('```json')) {
+        text = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (text.startsWith('```')) {
+        text = text.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
+
+    const jsonResponse = JSON.parse(text);
     res.json(jsonResponse);
 
   } catch (err) {

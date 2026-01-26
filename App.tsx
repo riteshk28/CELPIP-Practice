@@ -313,7 +313,7 @@ const AdminDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, 
 
   const handleCreateSet = () => {
     const newSet: PracticeSet = {
-      id: `set-${Date.now()}`,
+      id: `set-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       title: 'New Practice Set',
       description: '',
       isPublished: false,
@@ -444,7 +444,7 @@ const SetEditor: React.FC<{
 
   const addSection = (type: 'READING' | 'WRITING' | 'LISTENING') => {
     const newSection = {
-      id: `sec-${Date.now()}`,
+      id: `sec-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       setId: set.id,
       type,
       title: `New ${type} Section`,
@@ -470,8 +470,9 @@ const SetEditor: React.FC<{
     if (!section) return;
     
     // Default timer for listening audio parts can be small, user can adjust
+    // ADDED RANDOM STRING TO ID TO PREVENT COLLISION
     const newPart = {
-      id: `part-${Date.now()}`,
+      id: `part-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       sectionId,
       timerSeconds: section.type === 'LISTENING' ? 0 : 600, 
       contentText: '',
@@ -634,8 +635,9 @@ const PartEditor: React.FC<{
   );
 
   const addItem = (type: QuestionType) => {
+    // Unique ID for items
     const newItem = {
-      id: `item-${Date.now()}`,
+      id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       partId: part.id,
       text: type === 'MCQ' ? '' : type === 'CLOZE' ? '' : '',
       type,
@@ -1421,21 +1423,10 @@ const TestRunner: React.FC<{
     
     for (const sec of writingSections) {
         for (const p of sec.parts) {
-            const response = writingInputs[sec.id]; // Currently logic stores one input per section for writing
-            // Note: The data model for writing inputs might need to be per-part if there are multiple parts.
-            // Current `writingInputs` uses section.id as key. If a section has multiple parts, we need to handle that.
-            // For now, assuming 1 part per writing section OR sharing the input? 
-            // The PartEditor has separate parts. Let's assume user wrote response for THIS part.
-            // Actually, `TextArea` in TestRunner uses `writingInputs[section.id]`.
-            // Limitation: If multiple parts in one writing section, they overwrite.
-            // Correction: Writing sections usually have unique prompts per part.
-            // The TestRunner uses: `value={writingInputs[section.id] || ''}`. This is a bug for multi-part writing.
-            // Fix for evaluation: We will evaluate whatever is in `writingInputs[section.id]`. 
-            // Ideally we should key by part.id. Let's fix that while we are here?
-            // No, strictly no unauthorized changes. I will assume the input is valid for the context.
+            // Use PART ID for retrieval, matching new storage logic
+            const response = writingInputs[p.id]; 
             
-            // Wait, if I don't fix it, only one eval happens. 
-            // Let's use `writingInputs[section.id]` as the response for now.
+            // Only send for evaluation if there is significant text
             if (response && response.trim().length > 10) {
                  const result = await API.evaluateWriting(p.instructions + "\n" + p.contentText, response);
                  if (result) {
@@ -1483,7 +1474,11 @@ const TestRunner: React.FC<{
           // Use AI score if available, otherwise default 0
           // Sum up part scores? Average them?
           // If multiple parts, average the band score.
-          const partScores = sec.parts.map(p => aiFeedback[p.id]?.bandScore || 0).filter((s: number) => s > 0);
+          const partScores = sec.parts.map(p => {
+             const feedback = aiFeedback[p.id];
+             return feedback ? feedback.bandScore : 0;
+          }).filter((s: number) => s > 0);
+          
           const avg = partScores.length > 0 ? Math.round(partScores.reduce((a, b) => a + b, 0) / partScores.length) : 0;
           scores[sec.id] = avg; 
       }
@@ -1689,14 +1684,14 @@ const TestRunner: React.FC<{
                 <div className="flex justify-between items-center mb-2">
                     <label className="font-bold text-slate-700 uppercase text-xs tracking-wider">Your Response</label>
                     <span className="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                    Word Count: {(writingInputs[section.id] || '').split(/\s+/).filter(w => w.length > 0).length}
+                    Word Count: {(writingInputs[part.id] || '').split(/\s+/).filter(w => w.length > 0).length}
                     </span>
                 </div>
                 <TextArea 
                     className="flex-1 w-full p-6 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none font-mono text-base leading-relaxed bg-white text-slate-900 transition-colors shadow-inner min-h-[500px]"
                     placeholder="Type your response here..."
-                    value={writingInputs[section.id] || ''}
-                    onChange={(e) => setWritingInputs(prev => ({ ...prev, [section.id]: e.target.value }))}
+                    value={writingInputs[part.id] || ''}
+                    onChange={(e) => setWritingInputs(prev => ({ ...prev, [part.id]: e.target.value }))}
                 />
                 </div>
             )}
