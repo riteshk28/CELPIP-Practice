@@ -1483,7 +1483,7 @@ const TestRunner: React.FC<{
           // Use AI score if available, otherwise default 0
           // Sum up part scores? Average them?
           // If multiple parts, average the band score.
-          const partScores = sec.parts.map(p => (aiFeedback[p.id] as WritingEvaluation | undefined)?.bandScore || 0).filter(s => s > 0);
+          const partScores = sec.parts.map(p => aiFeedback[p.id]?.bandScore || 0).filter(s => s > 0);
           const avg = partScores.length > 0 ? Math.round(partScores.reduce((a, b) => a + b, 0) / partScores.length) : 0;
           scores[sec.id] = avg; 
       }
