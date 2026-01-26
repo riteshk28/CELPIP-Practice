@@ -241,11 +241,21 @@ app.post('/api/evaluate-writing', async (req, res) => {
         === STUDENT RESPONSE ===
         ${userResponse}
 
+        === EXAMINER GUIDANCE ===
+        **For Task 1 (Email):**
+        * Focus heavily on **Tone/Register**. If writing to a boss, it must be formal. If to a friend, informal.
+        * Ensure every bullet point in the prompt is addressed.
+
+        **For Task 2 (Opinion Survey):**
+        * **Crucial:** Do not penalize the student for "factual" contradictions against the prompt's background information.
+        * If the prompt says "Option B is expensive," but the student argues "Option B saves money," **accept this as a valid opinion**. The student is allowed to invent reasons or challenge premises to support their choice.
+        * Focus entirely on how **persuasively and clearly** they express that opinion in English, not on the real-world logic of their argument.
+
         === EVALUATION CRITERIA ===
-        1. **Content/Coherence**: Number of ideas, quality of ideas, organization, transitions, paragraphing.
+        1. **Content/Coherence**: Logical flow of sentences, paragraphing, and clarity of the argument (regardless of factual accuracy).
         2. **Vocabulary**: Word choice, range, precision, naturalness.
         3. **Readability**: Grammar, punctuation, spelling, sentence structure variety.
-        4. **Task Fulfillment**: Word count compliance, tone appropriateness, addressing all task bullets.
+        4. **Task Fulfillment**: Word count compliance, tone appropriateness, and relevance to the topic.
 
         === OUTPUT FORMAT INSTRUCTIONS ===
         You must return valid JSON.
@@ -255,7 +265,7 @@ app.post('/api/evaluate-writing', async (req, res) => {
         - feedback: A formatted string using simple Markdown headers (###) for each category. Be very specific about what they did well and what they missed. Example: "### Vocabulary\nGood use of..."
         - corrections: A formatted string listing specific errors. Use the format: "**Original Text** -> **Better Version**: Explanation". separating each error with a newline.
 
-        Be strict but constructive. Identify major grammatical errors.
+        Be strict on Grammar and Vocabulary, but lenient on the Logic of the opinion.
         `,
         config: {
             responseMimeType: "application/json",
