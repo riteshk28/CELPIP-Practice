@@ -1273,20 +1273,44 @@ const WritingEvaluationView: React.FC<{
     const renderFormattedText = (text: string) => {
         if (!text) return null;
         return text.split('\n').map((line, i) => {
-            // Header detection
-            if (line.startsWith('###')) {
-                return <h5 key={i} className="text-sm font-bold text-slate-800 uppercase tracking-wide mt-4 mb-2">{line.replace(/^###\s*/, '')}</h5>;
+            let cleanLine = line.trim();
+            if (!cleanLine) return <div key={i} className="h-2"></div>; // Preserve some spacing for empty lines
+
+            // Header detection: ### Header OR **Header** (short, no colons)
+            const isHeader = cleanLine.startsWith('###') || (cleanLine.startsWith('**') && cleanLine.endsWith('**') && cleanLine.length < 50 && !cleanLine.includes(':'));
+            
+            if (isHeader) {
+                const content = cleanLine.replace(/^###\s*/, '').replace(/^\*\*/, '').replace(/\*\*$/, '');
+                return <h5 key={i} className="text-xs font-bold text-slate-500 uppercase tracking-wider mt-4 mb-2">{content}</h5>;
             }
-            // Simple bold parsing
-            const parts = line.split(/(\*\*.*?\*\*)/g);
+
+            // List item detection
+            const isListItem = cleanLine.startsWith('- ') || cleanLine.startsWith('* ');
+            if (isListItem) {
+                cleanLine = cleanLine.replace(/^[-*]\s+/, '');
+            }
+
+            // Parse bold: **text**
+            const parts = cleanLine.split(/(\*\*.*?\*\*)/g);
+            const content = parts.map((part, j) => {
+                if (part.startsWith('**') && part.endsWith('**')) {
+                    return <strong key={j} className="font-semibold text-slate-900">{part.slice(2, -2)}</strong>;
+                }
+                return <span key={j}>{part}</span>;
+            });
+
+            if (isListItem) {
+                return (
+                    <div key={i} className="flex gap-2 mb-1 text-sm leading-relaxed text-slate-700 pl-2">
+                        <span className="text-blue-400 font-bold">•</span>
+                        <p>{content}</p>
+                    </div>
+                );
+            }
+
             return (
                 <p key={i} className="mb-2 text-sm leading-relaxed text-slate-700">
-                    {parts.map((part, j) => {
-                        if (part.startsWith('**') && part.endsWith('**')) {
-                            return <strong key={j} className="font-semibold text-slate-900">{part.slice(2, -2)}</strong>;
-                        }
-                        return part;
-                    })}
+                    {content}
                 </p>
             );
         });
