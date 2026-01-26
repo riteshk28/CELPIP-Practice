@@ -2010,16 +2010,48 @@ const UserDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, o
 // 7. ROOT COMPONENT
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
+
+  // Restore session on mount
+  useEffect(() => {
+    const stored = localStorage.getItem('celprep_user_session');
+    if (stored) {
+      try {
+        const parsedUser = JSON.parse(stored);
+        setUser(parsedUser);
+      } catch (err) {
+        console.error("Failed to restore session", err);
+        localStorage.removeItem('celprep_user_session');
+      }
+    }
+    setIsAuthChecking(false);
+  }, []);
+
+  // Persist session on login
+  const handleLogin = (u: User) => {
+    localStorage.setItem('celprep_user_session', JSON.stringify(u));
+    setUser(u);
+  };
+
+  // Clear session on logout
+  const handleLogout = () => {
+    localStorage.removeItem('celprep_user_session');
+    setUser(null);
+  };
+
+  if (isAuthChecking) {
+    return <div className="h-screen flex items-center justify-center bg-slate-50 text-slate-400 animate-pulse">Loading session...</div>;
+  }
 
   if (!user) {
-    return <LoginScreen onLogin={setUser} />;
+    return <LoginScreen onLogin={handleLogin} />;
   }
 
   if (user.role === 'admin') {
-    return <AdminDashboard user={user} onLogout={() => setUser(null)} />;
+    return <AdminDashboard user={user} onLogout={handleLogout} />;
   }
 
-  return <UserDashboard user={user} onLogout={() => setUser(null)} />;
+  return <UserDashboard user={user} onLogout={handleLogout} />;
 };
 
 export default App;
