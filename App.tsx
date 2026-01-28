@@ -106,21 +106,36 @@ const StrictAudioPlayer: React.FC<{
     };
   }, [src, autoPlay, disabled]);
 
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio || disabled || hasEnded) return;
+
+    if (isPlaying) {
+      audio.pause();
+    } else {
+      audio.play();
+    }
+  };
+
   return (
     <div className={`bg-slate-800 p-4 rounded-lg shadow-md border border-slate-700 ${disabled ? 'opacity-60 grayscale' : ''}`}>
       <audio ref={audioRef} src={src} className="hidden" />
       
       <div className="flex items-center gap-4 mb-3">
         {/* Status Icon */}
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isPlaying ? 'bg-blue-500 animate-pulse' : 'bg-slate-600'}`}>
+        <button 
+            onClick={togglePlay}
+            disabled={disabled || hasEnded}
+            className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all ${isPlaying ? 'bg-blue-500 animate-pulse' : 'bg-slate-600 hover:bg-slate-500'} ${disabled || hasEnded ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+        >
           {isPlaying ? (
             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
           ) : hasEnded || disabled ? (
             <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
           ) : (
-             <svg className="w-5 h-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /></svg>
+             <svg className="w-5 h-5 text-slate-300 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /></svg>
           )}
-        </div>
+        </button>
         
         <div className="flex-1">
           <div className="text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
@@ -1725,6 +1740,20 @@ const TestRunner: React.FC<{
                     </div>
                 )}
 
+                {/* --- NEW: Listening Question Audio Players in Left Pane --- */}
+                {section.type === 'LISTENING' && !isAudioScreen && (
+                    <div className="space-y-4 mb-6">
+                        {numberedQuestions.map((q: any) => (
+                            q.audioData && (
+                                <div key={`audio-${q.id}`} className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                                    <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Question {q.displayNum} Audio</div>
+                                    <StrictAudioPlayer src={q.audioData} autoPlay={true} />
+                                </div>
+                            )
+                        ))}
+                    </div>
+                )}
+
                 <div className="mb-6">
                     {renderMainContent(part.contentText)}
                 </div>
@@ -1761,12 +1790,6 @@ const TestRunner: React.FC<{
                             <div className="font-semibold text-slate-900 mb-4 flex gap-3 items-start">
                             <span className="bg-slate-800 text-white w-7 h-7 rounded flex items-center justify-center text-sm font-bold shrink-0 mt-0.5">{q.displayNum}</span>
                             <div className="flex-1">
-                                {/* Specific Question Audio */}
-                                {q.audioData && (
-                                    <div className="mb-2">
-                                        <StrictAudioPlayer src={q.audioData} autoPlay={false} />
-                                    </div>
-                                )}
                                 <span className="mt-0.5">{q.text}</span>
                             </div>
                             </div>
