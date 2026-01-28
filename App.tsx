@@ -628,8 +628,11 @@ const PartEditor: React.FC<{
 }> = ({ part, index, sectionType, onChange, onDelete }) => {
   const [timerMode, setTimerMode] = useState<'sec' | 'mmss'>('sec');
   
-  // For Listening: Decide if this "Part" is currently acting as Audio Only or Questions
-  // Default to 'AUDIO' if audioData exists and no questions, otherwise 'QUESTIONS'
+  // New State for Audio Generation
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [audioSourceMode, setAudioSourceMode] = useState<'UPLOAD' | 'GENERATE'>('UPLOAD');
+  const [generatingQ, setGeneratingQ] = useState<string | null>(null);
+
   const [listeningScreenType, setListeningScreenType] = useState<'AUDIO' | 'QUESTIONS'>(
     (sectionType === 'LISTENING' && !part.audioData && part.questions.length > 0) ? 'QUESTIONS' : 'AUDIO'
   );
@@ -668,6 +671,33 @@ const PartEditor: React.FC<{
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleGenerateAudio = async () => {
+     if (!part.contentText || part.contentText.trim().length === 0) return alert("Please enter the script text first.");
+     setIsGenerating(true);
+     const result = await API.generateSpeech(part.contentText); 
+     setIsGenerating(false);
+     if (result?.audioData) {
+         onChange({ ...part, audioData: result.audioData });
+     } else {
+         alert("Failed to generate audio. Check API key or connection.");
+     }
+  };
+
+  const handleGenerateQuestionAudio = async (qId: string, text: string) => {
+      if (!text) return alert("Enter question text first.");
+      setGeneratingQ(qId);
+      const result = await API.generateSpeech(text);
+      setGeneratingQ(null);
+      if (result?.audioData) {
+          const newQs = part.questions.map((q: any) => 
+              q.id === qId ? { ...q, audioData: result.audioData } : q
+          );
+          onChange({ ...part, questions: newQs });
+      } else {
+          alert("Failed to generate audio.");
+      }
   };
 
   const handleQuestionAudioUpload = (qId: string, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -839,27 +869,61 @@ const PartEditor: React.FC<{
                 </div>
               )}
 
-              {/* Listening Audio Upload - Only for 'AUDIO' screens */}
+              {/* LISTENING: AUDIO GENERATION UI */}
               {sectionType === 'LISTENING' && listeningScreenType === 'AUDIO' && (
-                  <div className="bg-amber-50 p-6 rounded-lg border border-amber-100 shrink-0 flex flex-col justify-center items-center h-64 border-dashed border-2 border-amber-200">
-                    <div className="mb-4 text-center">
-                        <label className="block text-sm font-bold text-amber-600 uppercase tracking-wider mb-1">Main Audio Track</label>
-                        <p className="text-xs text-slate-500">This will play automatically when the screen loads.</p>
-                    </div>
-                    
-                    {!part.audioData ? (
-                        <input type="file" accept="audio/*" onChange={handleAudioUpload} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-amber-100 file:text-amber-700 hover:file:bg-amber-200 text-center"/>
-                    ) : (
-                        <div className="w-full max-w-xs text-center">
-                           <audio controls src={part.audioData} className="w-full h-10 mb-2" />
-                           <button 
-                            onClick={() => onChange({ ...part, audioData: undefined })}
-                            className="text-xs text-red-500 hover:text-red-700 font-bold underline"
+                  <div className="bg-amber-50/50 p-4 rounded-lg border border-amber-100 shrink-0 flex flex-col h-full overflow-hidden">
+                     <div className="flex justify-between items-center mb-4 border-b border-amber-200 pb-2">
+                        <label className="block text-sm font-bold text-amber-700 uppercase tracking-wider">Main Audio Clip</label>
+                        <div className="flex bg-white rounded-md border border-slate-200 p-0.5">
+                            <button 
+                                onClick={() => setAudioSourceMode('UPLOAD')} 
+                                className={`px-2 py-0.5 text-[10px] font-bold rounded ${audioSourceMode === 'UPLOAD' ? 'bg-amber-100 text-amber-800' : 'text-slate-500'}`}
                             >
-                            Remove Audio
+                                Upload
+                            </button>
+                            <button 
+                                onClick={() => setAudioSourceMode('GENERATE')} 
+                                className={`px-2 py-0.5 text-[10px] font-bold rounded ${audioSourceMode === 'GENERATE' ? 'bg-amber-100 text-amber-800' : 'text-slate-500'}`}
+                            >
+                                Generate AI
                             </button>
                         </div>
-                    )}
+                     </div>
+                     
+                     {audioSourceMode === 'UPLOAD' ? (
+                        <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-amber-200 rounded-lg bg-white/50">
+                           {!part.audioData ? (
+                                <input type="file" accept="audio/*" onChange={handleAudioUpload} className="block w-full max-w-xs text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-amber-100 file:text-amber-700 hover:file:bg-amber-200"/>
+                           ) : (
+                                <div className="text-center w-full max-w-xs">
+                                    <audio controls src={part.audioData} className="w-full h-10 mb-2" />
+                                    <button onClick={() => onChange({ ...part, audioData: undefined })} className="text-xs text-red-500 hover:underline">Remove</button>
+                                </div>
+                           )}
+                        </div>
+                     ) : (
+                        <div className="flex-1 flex flex-col min-h-0">
+                             <textarea 
+                                className="flex-1 w-full p-3 border border-slate-200 rounded resize-none text-sm font-mono mb-2 focus:ring-2 focus:ring-amber-400 outline-none"
+                                placeholder={`Man: Hello, how are you?\nWoman: I'm good thanks.\n\n(Use "Name:" to distinguish speakers)`}
+                                value={part.contentText || ''}
+                                onChange={(e) => onChange({ ...part, contentText: e.target.value })}
+                             />
+                             <div className="flex justify-between items-center">
+                                 <div className="text-[10px] text-slate-400">
+                                     Supports multi-speaker generation.
+                                 </div>
+                                 <div className="flex gap-2">
+                                     {part.audioData && (
+                                         <audio controls src={part.audioData} className="h-8 w-40" />
+                                     )}
+                                     <Button size="sm" onClick={handleGenerateAudio} disabled={isGenerating}>
+                                         {isGenerating ? 'Generating...' : 'Generate Audio'}
+                                     </Button>
+                                 </div>
+                             </div>
+                        </div>
+                     )}
                   </div>
               )}
 
@@ -960,21 +1024,30 @@ const PartEditor: React.FC<{
                             <div className="mb-2">
                               {/* Audio Upload for specific question */}
                               {sectionType === 'LISTENING' && (
-                                  <div className="mb-2">
-                                      <div className="flex items-center gap-2 mb-1">
-                                         <label className="text-[10px] font-bold text-slate-400 uppercase">Spoken Question (Optional)</label>
-                                         {q.audioData && (
-                                             <button onClick={() => {
-                                                 const newQs = [...part.questions];
-                                                 newQs[qIdx].audioData = undefined;
-                                                 onChange({ ...part, questions: newQs });
-                                             }} className="text-[10px] text-red-500 hover:underline">Remove</button>
-                                         )}
-                                      </div>
-                                      {!q.audioData ? (
-                                          <input type="file" accept="audio/*" onChange={(e) => handleQuestionAudioUpload(q.id, e)} className="text-[10px] w-full text-slate-500" />
+                                  <div className="mb-2 flex items-center gap-2 bg-slate-50 p-1.5 rounded border border-slate-100">
+                                      {q.audioData ? (
+                                         <>
+                                            <audio controls src={q.audioData} className="h-6 w-32" />
+                                            <button onClick={() => {
+                                                const newQs = [...part.questions];
+                                                newQs[qIdx].audioData = undefined;
+                                                onChange({ ...part, questions: newQs });
+                                            }} className="text-[10px] text-red-500 hover:underline">Remove</button>
+                                         </>
                                       ) : (
-                                          <audio controls src={q.audioData} className="h-6 w-full" />
+                                         <div className="flex items-center gap-2 w-full">
+                                             <button 
+                                                className="text-[10px] bg-blue-50 text-blue-600 border border-blue-200 px-2 py-1 rounded font-bold hover:bg-blue-100"
+                                                onClick={() => handleGenerateQuestionAudio(q.id, q.text)}
+                                             >
+                                                {generatingQ === q.id ? '...' : '♫ Generate Audio'}
+                                             </button>
+                                             <span className="text-[10px] text-slate-400">or</span>
+                                             <label className="text-[10px] text-slate-500 cursor-pointer underline hover:text-blue-600">
+                                                 Upload File
+                                                 <input type="file" accept="audio/*" onChange={(e) => handleQuestionAudioUpload(q.id, e)} className="hidden" />
+                                             </label>
+                                         </div>
                                       )}
                                   </div>
                               )}

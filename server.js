@@ -1,3 +1,4 @@
+
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
@@ -20,6 +21,33 @@ const pool = new Pool({
 // Note: In local development, ensure process.env.API_KEY is set or passed when running the server
 const apiKey = process.env.API_KEY;
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+
+// --- HELPERS ---
+
+// Convert Raw PCM to WAV (Essential for browser playback)
+function addWavHeader(pcmData, sampleRate = 24000, numChannels = 1) {
+    const header = Buffer.alloc(44);
+    const byteRate = sampleRate * numChannels * 2; // 16-bit = 2 bytes
+    const blockAlign = numChannels * 2;
+    const dataSize = pcmData.length;
+    const totalSize = 36 + dataSize;
+
+    header.write('RIFF', 0);
+    header.writeUInt32LE(totalSize, 4);
+    header.write('WAVE', 8);
+    header.write('fmt ', 12);
+    header.writeUInt32LE(16, 16); // Subchunk1Size
+    header.writeUInt16LE(1, 20); // AudioFormat (1 = PCM)
+    header.writeUInt16LE(numChannels, 22);
+    header.writeUInt32LE(sampleRate, 24);
+    header.writeUInt32LE(byteRate, 28);
+    header.writeUInt16LE(blockAlign, 32);
+    header.writeUInt16LE(16, 34); // BitsPerSample
+    header.write('data', 36);
+    header.writeUInt32LE(dataSize, 40);
+
+    return Buffer.concat([header, pcmData]);
+}
 
 // --- ROUTES ---
 
@@ -218,88 +246,103 @@ app.get('/api/attempts/:userId', async (req, res) => {
   }
 });
 
-// 8. EVALUATE WRITING (New Endpoint)
+// 8. EVALUATE WRITING
 app.post('/api/evaluate-writing', async (req, res) => {
   const { questionText, userResponse } = req.body;
-  
-  // If no API key configured, return mock data to prevent crash
-  if (!ai) {
-      return res.json({
-          bandScore: 7,
-          feedback: "API Key missing. This is a mock evaluation.\n\nYour writing is clear but needs better vocabulary.",
-          corrections: "Ensure the Gemini API Key is set in Vercel environment variables."
-      });
-  }
+  if (!ai) return res.json({ bandScore: 7, feedback: "API Key missing.", corrections: "Check configuration." });
 
   try {
     const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `You are an expert CELPIP Examiner. Evaluate the student response based on the official 4 CELPIP categories.
-        
-        === PROMPT ===
-        ${questionText}
-
-        === STUDENT RESPONSE ===
-        ${userResponse}
-
-        === EXAMINER GUIDANCE ===
-        **For Task 1 (Email):**
-        * Focus heavily on **Tone/Register**. If writing to a boss, it must be formal. If to a friend, informal.
-        * Ensure every bullet point in the prompt is addressed.
-
-        **For Task 2 (Opinion Survey):**
-        * **Crucial:** Do not penalize the student for "factual" contradictions against the prompt's background information.
-        * If the prompt says "Option B is expensive," but the student argues "Option B saves money," **accept this as a valid opinion**. The student is allowed to invent reasons or challenge premises to support their choice.
-        * Focus entirely on how **persuasively and clearly** they express that opinion in English, not on the real-world logic of their argument.
-
-        === EVALUATION CRITERIA ===
-        1. **Content/Coherence**: Logical flow of sentences, paragraphing, and clarity of the argument (regardless of factual accuracy).
-        2. **Vocabulary**: Word choice, range, precision, naturalness.
-        3. **Readability**: Grammar, punctuation, spelling, sentence structure variety.
-        4. **Task Fulfillment**: Word count compliance, tone appropriateness, and relevance to the topic.
-
-        === OUTPUT FORMAT INSTRUCTIONS ===
-        You must return valid JSON.
-        
-        Fields:
-        - bandScore: An integer from 0 to 12.
-        - feedback: A formatted string using simple Markdown headers (###) for each category. Be very specific about what they did well and what they missed. Example: "### Vocabulary\nGood use of..."
-        - corrections: A formatted string listing specific errors. Use the format: "**Original Text** -> **Better Version**: Explanation". separating each error with a newline.
-
-        Be strict on Grammar and Vocabulary, but lenient on the Logic of the opinion.
-        `,
+        contents: `Evaluate CELPIP Writing.\nPROMPT: ${questionText}\nRESPONSE: ${userResponse}\nOUTPUT JSON: {bandScore, feedback, corrections}`,
         config: {
             responseMimeType: "application/json",
             responseSchema: {
                 type: Type.OBJECT,
                 properties: {
-                    bandScore: { type: Type.NUMBER, description: "CELPIP Level 0-12" },
-                    feedback: { type: Type.STRING, description: "Detailed Markdown feedback categorized by criteria." },
-                    corrections: { type: Type.STRING, description: "List of specific errors and improvements." }
+                    bandScore: { type: Type.NUMBER },
+                    feedback: { type: Type.STRING },
+                    corrections: { type: Type.STRING }
                 }
             }
         }
     });
-    
     let text = response.text;
-    if (!text) {
-        throw new Error("Gemini returned empty response. It might have been blocked by safety settings.");
-    }
-
-    // Clean up potential markdown formatting if the model adds it despite mimeType
-    if (text.startsWith('```json')) {
-        text = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (text.startsWith('```')) {
-        text = text.replace(/^```\s*/, '').replace(/\s*```$/, '');
-    }
-
-    const jsonResponse = JSON.parse(text);
-    res.json(jsonResponse);
-
+    if (text.startsWith('```json')) text = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    else if (text.startsWith('```')) text = text.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    res.json(JSON.parse(text));
   } catch (err) {
     console.error("Gemini Error:", err);
     res.status(500).json({ error: "Failed to evaluate writing." });
   }
+});
+
+// 9. GENERATE SPEECH (New Endpoint)
+app.post('/api/generate-speech', async (req, res) => {
+    const { text } = req.body;
+    if (!ai) return res.status(500).json({ error: "API Key missing" });
+    if (!text) return res.status(400).json({ error: "Text is required" });
+
+    try {
+        // Detect speakers based on "Name:" pattern
+        const speakerRegex = /^([A-Za-z0-9 ]+):/gm;
+        const speakers = new Set();
+        let match;
+        while ((match = speakerRegex.exec(text)) !== null) {
+            speakers.add(match[1].trim());
+        }
+        const uniqueSpeakers = Array.from(speakers);
+
+        let config = {};
+
+        // If 2 or more speakers detected, use multi-speaker config
+        if (uniqueSpeakers.length >= 2) {
+            // Assign specific voices to the first few unique speakers found
+            // Voices: Fenrir (M), Kore (F), Puck (M), Charon (M)
+            const voices = ['Fenrir', 'Kore', 'Puck', 'Charon'];
+            
+            const speakerConfigs = uniqueSpeakers.slice(0, 4).map((speakerName, index) => ({
+                speaker: speakerName,
+                voiceConfig: { prebuiltVoiceConfig: { voiceName: voices[index % voices.length] } }
+            }));
+
+            config = {
+                responseModalities: ["AUDIO"],
+                speechConfig: {
+                    multiSpeakerVoiceConfig: {
+                        speakerVoiceConfigs: speakerConfigs
+                    }
+                }
+            };
+        } else {
+            // Single speaker fallback
+            config = {
+                responseModalities: ["AUDIO"],
+                speechConfig: {
+                    voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Fenrir' } }
+                }
+            };
+        }
+
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash-preview-tts",
+            contents: { parts: [{ text: text }] },
+            config: config
+        });
+
+        const rawPcmBase64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (!rawPcmBase64) throw new Error("No audio generated.");
+
+        const pcmBuffer = Buffer.from(rawPcmBase64, 'base64');
+        const wavBuffer = addWavHeader(pcmBuffer, 24000); 
+        const wavBase64 = wavBuffer.toString('base64');
+
+        res.json({ audioData: `data:audio/wav;base64,${wavBase64}` });
+
+    } catch (err) {
+        console.error("TTS Error:", err);
+        res.status(500).json({ error: err.message || "Failed to generate speech" });
+    }
 });
 
 app.listen(port, () => {

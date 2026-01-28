@@ -103,7 +103,7 @@ export const API = {
     }
   },
 
-  // Evaluate Writing (New)
+  // Evaluate Writing
   evaluateWriting: async (questionText: string, userResponse: string): Promise<WritingEvaluation | null> => {
     try {
         const res = await fetch(`${API_URL}/evaluate-writing`, {
@@ -115,6 +115,22 @@ export const API = {
         return await res.json();
     } catch (e) {
         console.error("Evaluation failed", e);
+        return null;
+    }
+  },
+
+  // Generate Speech (TTS)
+  generateSpeech: async (text: string): Promise<{ audioData: string } | null> => {
+    try {
+        const res = await fetch(`${API_URL}/generate-speech`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+        });
+        if (!res.ok) return null;
+        return await res.json();
+    } catch (e) {
+        console.error("TTS failed", e);
         return null;
     }
   }
