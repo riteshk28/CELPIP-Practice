@@ -217,88 +217,123 @@ app.get('/api/attempts/:userId', async (req, res) => {
   }
 });
 
-// 8. EVALUATE WRITING (New Endpoint)
+// 8. EVALUATE WRITING
 app.post('/api/evaluate-writing', async (req, res) => {
   const { questionText, userResponse } = req.body;
   
-  // If no API key configured, return mock data to prevent crash
-  if (!ai) {
-      return res.json({
-          bandScore: 7,
-          feedback: "API Key missing. This is a mock evaluation.\n\nYour writing is clear but needs better vocabulary.",
-          corrections: "Ensure the Gemini API Key is set in Vercel environment variables."
-      });
-  }
+  if (!ai) return res.json({ bandScore: 7, feedback: "API Key missing.", corrections: "Check configuration." });
 
   try {
     const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `You are an expert CELPIP Examiner. Evaluate the student response based on the official 4 CELPIP categories.
-        
-        === PROMPT ===
-        ${questionText}
-
-        === STUDENT RESPONSE ===
-        ${userResponse}
-
-        === EXAMINER GUIDANCE ===
-        **For Task 1 (Email):**
-        * Focus heavily on **Tone/Register**. If writing to a boss, it must be formal. If to a friend, informal.
-        * Ensure every bullet point in the prompt is addressed.
-
-        **For Task 2 (Opinion Survey):**
-        * **Crucial:** Do not penalize the student for "factual" contradictions against the prompt's background information.
-        * If the prompt says "Option B is expensive," but the student argues "Option B saves money," **accept this as a valid opinion**. The student is allowed to invent reasons or challenge premises to support their choice.
-        * Focus entirely on how **persuasively and clearly** they express that opinion in English, not on the real-world logic of their argument.
-
-        === EVALUATION CRITERIA ===
-        1. **Content/Coherence**: Logical flow of sentences, paragraphing, and clarity of the argument (regardless of factual accuracy).
-        2. **Vocabulary**: Word choice, range, precision, naturalness.
-        3. **Readability**: Grammar, punctuation, spelling, sentence structure variety.
-        4. **Task Fulfillment**: Word count compliance, tone appropriateness, and relevance to the topic.
-
-        === OUTPUT FORMAT INSTRUCTIONS ===
-        You must return valid JSON.
-        
-        Fields:
-        - bandScore: An integer from 0 to 12.
-        - feedback: A formatted string using simple Markdown headers (###) for each category. Be very specific about what they did well and what they missed. Example: "### Vocabulary\nGood use of..."
-        - corrections: A formatted string listing specific errors. Use the format: "**Original Text** -> **Better Version**: Explanation". separating each error with a newline.
-
-        Be strict on Grammar and Vocabulary, but lenient on the Logic of the opinion.
-        `,
+        contents: `Evaluate CELPIP Writing.\nPROMPT: ${questionText}\nRESPONSE: ${userResponse}\nOUTPUT JSON: {bandScore, feedback, corrections}`,
         config: {
             responseMimeType: "application/json",
             responseSchema: {
                 type: Type.OBJECT,
                 properties: {
-                    bandScore: { type: Type.NUMBER, description: "CELPIP Level 0-12" },
-                    feedback: { type: Type.STRING, description: "Detailed Markdown feedback categorized by criteria." },
-                    corrections: { type: Type.STRING, description: "List of specific errors and improvements." }
+                    bandScore: { type: Type.NUMBER },
+                    feedback: { type: Type.STRING },
+                    corrections: { type: Type.STRING }
                 }
             }
         }
     });
-    
-    let text = response.text;
-    if (!text) {
-        throw new Error("Gemini returned empty response. It might have been blocked by safety settings.");
-    }
-
-    // Clean up potential markdown formatting if the model adds it despite mimeType
-    if (text.startsWith('```json')) {
-        text = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (text.startsWith('```')) {
-        text = text.replace(/^```\s*/, '').replace(/\s*```$/, '');
-    }
-
-    const jsonResponse = JSON.parse(text);
-    res.json(jsonResponse);
-
+    res.json(JSON.parse(response.text));
   } catch (err) {
     console.error("Gemini Error:", err);
     res.status(500).json({ error: "Failed to evaluate writing." });
   }
+});
+
+// 9. GENERATE SPEECH (New & Enhanced)
+app.post('/api/generate-speech', async (req, res) => {
+    const { text } = req.body;
+    if (!ai) return res.status(500).json({ error: "API Key missing" });
+
+    try {
+        // 1. Detect all unique speaker labels (e.g. "Man 1:", "Woman 2:", "Narrator:")
+        // Matches any word(s) before a colon at the start of a line
+        const speakerRegex = /^([A-Za-z0-9 ]+):/gm;
+        const speakers = new Set();
+        let match;
+        while ((match = speakerRegex.exec(text)) !== null) {
+            speakers.add(match[1].trim());
+        }
+        const uniqueSpeakers = Array.from(speakers);
+
+        // 2. Define Voice Pool
+        // Male/Neutral voices
+        const maleVoices = ['Fenrir', 'Charon', 'Puck', 'Zephyr'];
+        // Female voices
+        const femaleVoices = ['Kore', 'Aoede'];
+        
+        let mIndex = 0;
+        let fIndex = 0;
+
+        // 3. Assign Voices Dynamically
+        const speakerVoiceConfigs = [];
+        
+        if (uniqueSpeakers.length > 0) {
+            uniqueSpeakers.forEach(speaker => {
+                const lower = speaker.toLowerCase();
+                let voiceName = 'Fenrir'; // Default fallback
+
+                // Heuristic: If name implies female, use female voice list
+                if (lower.includes('woman') || lower.includes('girl') || lower.includes('lady') || lower.includes('mother') || lower.includes('jane') || lower.includes('sarah') || lower.includes('ms')) {
+                    voiceName = femaleVoices[fIndex % femaleVoices.length];
+                    fIndex++;
+                } 
+                // Otherwise use male/neutral voice list (including for "Narrator", "Man 1", "Boy")
+                else {
+                    voiceName = maleVoices[mIndex % maleVoices.length];
+                    mIndex++;
+                }
+
+                speakerVoiceConfigs.push({
+                    speaker: speaker,
+                    voiceConfig: { prebuiltVoiceConfig: { voiceName } }
+                });
+            });
+        }
+
+        let config = {};
+        
+        // If we found speakers, use Multi-Speaker config
+        if (speakerVoiceConfigs.length > 0) {
+            config = {
+                responseModalities: ["AUDIO"],
+                speechConfig: {
+                    multiSpeakerVoiceConfig: {
+                        speakerVoiceConfigs: speakerVoiceConfigs
+                    }
+                }
+            };
+        } else {
+            // No speakers found (Monologue), use single speaker config
+            config = {
+                responseModalities: ["AUDIO"],
+                speechConfig: {
+                    voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Fenrir' } }
+                }
+            };
+        }
+
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash-preview-tts",
+            contents: { parts: [{ text: text }] },
+            config: config
+        });
+
+        const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (!base64Audio) throw new Error("No audio generated");
+
+        res.json({ audioData: `data:audio/mp3;base64,${base64Audio}` });
+
+    } catch (err) {
+        console.error("TTS Error:", err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 module.exports = app;

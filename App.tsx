@@ -53,8 +53,9 @@ const Modal: React.FC<{
 };
 
 // Strict Audio Player for Test Takers (Play Once, No Seek)
+// UPDATED: No longer auto-generates. Strictly plays provided src.
 const StrictAudioPlayer: React.FC<{
-  src: string;
+  src?: string;
   onEnded?: () => void;
   autoPlay?: boolean;
   disabled?: boolean;
@@ -72,6 +73,8 @@ const StrictAudioPlayer: React.FC<{
     setHasEnded(false);
     setProgress(0);
     setIsPlaying(false);
+
+    if (!src) return;
 
     const handleTimeUpdate = () => {
       if (audio.duration) {
@@ -94,7 +97,7 @@ const StrictAudioPlayer: React.FC<{
     audio.addEventListener('pause', handlePause);
 
     // Initial autoplay
-    if (autoPlay && !disabled) {
+    if (autoPlay && !disabled && src) {
       audio.play().catch(e => console.log("Autoplay prevented:", e));
     }
 
@@ -105,6 +108,15 @@ const StrictAudioPlayer: React.FC<{
       audio.removeEventListener('pause', handlePause);
     };
   }, [src, autoPlay, disabled]);
+
+  if (!src) {
+      return (
+          <div className="bg-red-50 p-4 rounded-lg border border-red-200 text-center">
+              <p className="text-red-500 text-sm font-bold">Audio not available.</p>
+              <p className="text-red-400 text-xs">Please contact the administrator.</p>
+          </div>
+      )
+  }
 
   return (
     <div className={`bg-slate-800 p-4 rounded-lg shadow-md border border-slate-700 ${disabled ? 'opacity-60 grayscale' : ''}`}>
@@ -627,6 +639,7 @@ const PartEditor: React.FC<{
   onDelete: () => void; 
 }> = ({ part, index, sectionType, onChange, onDelete }) => {
   const [timerMode, setTimerMode] = useState<'sec' | 'mmss'>('sec');
+  const [isGenerating, setIsGenerating] = useState(false);
   
   // For Listening: Decide if this "Part" is currently acting as Audio Only or Questions
   // Default to 'AUDIO' if audioData exists and no questions, otherwise 'QUESTIONS'
@@ -646,6 +659,21 @@ const PartEditor: React.FC<{
       weight: 1
     };
     onChange({ ...part, questions: [...part.questions, newItem] });
+  };
+
+  const handleGenerateAudio = async () => {
+     if (!part.contentText || part.contentText.trim().length === 0) {
+         alert("Please enter a script first.");
+         return;
+     }
+     setIsGenerating(true);
+     const audio = await API.generateSpeech(part.contentText);
+     setIsGenerating(false);
+     if (audio) {
+         onChange({ ...part, audioData: audio });
+     } else {
+         alert("Failed to generate audio. Please check your API key and connection.");
+     }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -826,6 +854,48 @@ const PartEditor: React.FC<{
         <div className="grid grid-cols-2 gap-8 h-[600px]">
            {/* LEFT COLUMN */}
            <div className="flex flex-col space-y-4 h-full overflow-hidden">
+              {/* Listening SCRIPT Editor - Only for 'AUDIO' screens */}
+              {sectionType === 'LISTENING' && listeningScreenType === 'AUDIO' && (
+                  <div className="flex-1 flex flex-col min-h-0 bg-white border border-slate-200 rounded-lg p-3 relative">
+                    <div className="flex justify-between items-center mb-2">
+                        <label className="text-xs font-bold text-purple-600 uppercase tracking-wider flex items-center gap-2">
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+                            Audio Script
+                        </label>
+                        {part.audioData ? (
+                            <span className="text-[10px] text-green-600 font-bold bg-green-50 border border-green-200 px-2 py-0.5 rounded flex items-center gap-1">
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                Audio Generated
+                            </span>
+                        ) : (
+                             <span className="text-[10px] text-amber-600 font-bold bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">Not Generated</span>
+                        )}
+                    </div>
+                    <textarea
+                        className="flex-1 w-full text-sm font-mono p-2 border border-slate-200 rounded resize-none focus:outline-none focus:border-purple-400 mb-2"
+                        value={part.contentText || ''}
+                        onChange={(e) => onChange({ ...part, contentText: e.target.value })} 
+                        placeholder={`Type script here for automatic AI audio.\n\nSupported Labels:\nMan 1: Hello.\nWoman 2: Hi.\nNarrator: Once upon a time.\nBoy: Can I play?\n\nGemini will auto-assign distinct voices.`}
+                    />
+                    
+                    <div className="flex gap-2">
+                        <Button 
+                            variant="primary" 
+                            size="sm" 
+                            onClick={handleGenerateAudio} 
+                            disabled={isGenerating}
+                            className="w-full bg-purple-600 hover:bg-purple-700"
+                        >
+                            {isGenerating ? 'Generating Audio...' : 'Generate Audio from Script'}
+                        </Button>
+                    </div>
+
+                    <div className="mt-2 pt-2 border-t border-slate-100 text-[10px] text-slate-500">
+                        <strong>Usage:</strong> Type the script, click Generate, and verify the audio below. The audio will be saved with the Set.
+                    </div>
+                  </div>
+              )}
+
               {/* Only show Text Editor if NOT Listening (or if needed for Listening instructions context) */}
               {sectionType !== 'LISTENING' && (
                 <div className="flex-1 flex flex-col min-h-0">
@@ -839,25 +909,29 @@ const PartEditor: React.FC<{
                 </div>
               )}
 
-              {/* Listening Audio Upload - Only for 'AUDIO' screens */}
+              {/* Listening Audio Upload - Fallback if they really want to upload file */}
               {sectionType === 'LISTENING' && listeningScreenType === 'AUDIO' && (
-                  <div className="bg-amber-50 p-6 rounded-lg border border-amber-100 shrink-0 flex flex-col justify-center items-center h-64 border-dashed border-2 border-amber-200">
-                    <div className="mb-4 text-center">
-                        <label className="block text-sm font-bold text-amber-600 uppercase tracking-wider mb-1">Main Audio Track</label>
-                        <p className="text-xs text-slate-500">This will play automatically when the screen loads.</p>
+                  <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 shrink-0">
+                    <div className="mb-2">
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Generated Audio / Upload</label>
                     </div>
                     
                     {!part.audioData ? (
-                        <input type="file" accept="audio/*" onChange={handleAudioUpload} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-amber-100 file:text-amber-700 hover:file:bg-amber-200 text-center"/>
+                        <div className="space-y-2">
+                           <input type="file" accept="audio/*" onChange={handleAudioUpload} className="block w-full text-xs text-slate-500"/>
+                           <p className="text-[10px] text-slate-400 italic">Or upload your own MP3 file if you prefer.</p>
+                        </div>
                     ) : (
-                        <div className="w-full max-w-xs text-center">
-                           <audio controls src={part.audioData} className="w-full h-10 mb-2" />
-                           <button 
-                            onClick={() => onChange({ ...part, audioData: undefined })}
-                            className="text-xs text-red-500 hover:text-red-700 font-bold underline"
-                            >
-                            Remove Audio
-                            </button>
+                        <div className="flex flex-col gap-2">
+                           <audio controls src={part.audioData} className="w-full" />
+                           <div className="flex justify-end">
+                                <button 
+                                    onClick={() => onChange({ ...part, audioData: undefined })}
+                                    className="text-xs text-red-500 hover:text-red-700 font-bold underline"
+                                >
+                                    Clear Audio
+                                </button>
+                           </div>
                         </div>
                     )}
                   </div>
@@ -1389,7 +1463,8 @@ const TestRunner: React.FC<{
   // Derived state to identify if current screen is "Audio Only" or "Question Set"
   const section = set.sections[currentSectionIndex];
   const part = section?.parts[currentPartIndex];
-  const isAudioScreen = section?.type === 'LISTENING' && part?.audioData && (!part.questions || part.questions.length === 0);
+  // CHECK: If audioData exists OR contentText exists (as script), treat as Audio Screen IF NO QUESTIONS
+  const isAudioScreen = section?.type === 'LISTENING' && (part?.audioData || part?.contentText) && (!part.questions || part.questions.length === 0);
 
   // Initialize timer
   useEffect(() => {
@@ -1619,15 +1694,14 @@ const TestRunner: React.FC<{
                 <h2 className="text-2xl font-bold text-slate-900 mb-2">Listen to the recording</h2>
                 <p className="text-slate-500 mb-8">{part.instructions || "The test timer is paused while the audio is playing."}</p>
                 
-                {part.audioData && (
-                    <div className="max-w-md mx-auto">
-                        <StrictAudioPlayer 
-                            src={part.audioData} 
-                            // Auto-advance is optional, maybe too jarring. Let user click Next.
-                            // onEnded={() => {}} 
-                        />
-                    </div>
-                )}
+                {/* STRICT AUDIO PLAYER: Handles Both File AND Script-based Audio */}
+                <div className="max-w-md mx-auto">
+                    <StrictAudioPlayer 
+                        src={part.audioData} 
+                        // REMOVED script prop to enforce usage of baked audio only
+                        // script={part.contentText} 
+                    />
+                </div>
              </div>
           </div>
       )}
