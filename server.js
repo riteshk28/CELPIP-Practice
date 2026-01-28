@@ -249,32 +249,27 @@ app.get('/api/attempts/:userId', async (req, res) => {
 // 8. EVALUATE WRITING
 app.post('/api/evaluate-writing', async (req, res) => {
   const { questionText, userResponse } = req.body;
-  if (!ai) return res.json({ bandScore: 7, feedback: "API Key missing.", corrections: "Check configuration." });
+  if (!ai) return res.json({ bandScore: 0, feedback: "API Key missing.", corrections: "System Error" });
 
-  const systemInstruction = `You are an official CELPIP Writing Examiner. Your job is to grade the candidate's response with strict adherence to the CELPIP Performance Standards.
+  // Simplified and focused system instruction for speed and utility
+  const systemInstruction = `You are a CELPIP Writing Examiner. Grade the response based on the CELPIP Performance Standards.
 
-  **Grading Rubric (4 Categories):**
-  1. **Content/Coherence**: Quality of ideas, organization, formatting, paragraphing.
-  2. **Vocabulary**: Word choice, range, precision, natural phrasing.
-  3. **Readability**: Grammar, sentence structure, punctuation, spelling.
-  4. **Task Fulfillment**: Relevance, completeness, word count (150-200 words), tone.
+  **Grading Categories:**
+  1. Content/Coherence
+  2. Vocabulary
+  3. Readability (Grammar/Syntax)
+  4. Task Fulfillment
 
-  **Task Types:**
-  - **Task 1 (Email)**: Formal/Informal tone must match recipient. Must have salutation/sign-off.
-  - **Task 2 (Survey)**: Must express a clear option and justify it.
+  **Instructions:**
+  - Assign a CLB Level (1-12) for each category.
+  - Be critical.
+  - **Output JSON only.**
 
-  **Scoring Instructions:**
-  - Assign a CLB level (1-12) for *each* category.
-  - **CLB 7**: Adequate control, some errors but meaning is clear.
-  - **CLB 9**: Good control, only minor errors.
-  - **CLB 12**: Advanced/Native-like control.
-  - Be STRICT. Do not inflate scores.
-
-  **Output Requirements:**
-  - **bandScore**: The rounded average of the 4 categories.
-  - **scores**: A JSON object with the 4 category scores.
-  - **feedback**: Specific, actionable advice mentioning specific errors.
-  - **corrections**: A completely rewritten version of the candidate's text that achieves a perfect CLB 12 level.`;
+  **Output Schema Requirements:**
+  - bandScore: Rounded average CLB.
+  - scores: { content, vocabulary, readability, taskFulfillment }
+  - feedback: A concise summary of performance, mentioning 1 key strength and 1 key weakness for EACH category if possible.
+  - corrections: A bulleted list of the top 3-5 specific grammatical, lexical, or phrasing errors found in the text, along with the corrected version for each. Do NOT rewrite the entire text. Format: "* **Error:** [original] -> **Fix:** [correction] ([Reason])"`;
 
   try {
     const response = await ai.models.generateContent({
@@ -286,7 +281,7 @@ app.post('/api/evaluate-writing', async (req, res) => {
             responseSchema: {
                 type: Type.OBJECT,
                 properties: {
-                    bandScore: { type: Type.NUMBER, description: "Rounded overall CLB level (1-12)" },
+                    bandScore: { type: Type.NUMBER },
                     scores: {
                         type: Type.OBJECT,
                         properties: {
@@ -297,10 +292,10 @@ app.post('/api/evaluate-writing', async (req, res) => {
                         }
                     },
                     feedback: { type: Type.STRING },
-                    corrections: { type: Type.STRING, description: "Rewritten response at CLB 12 level." }
+                    corrections: { type: Type.STRING }
                 }
             },
-            thinkingConfig: { thinkingBudget: 0 } // Disable thinking to improve latency
+            thinkingConfig: { thinkingBudget: 0 } 
         }
     });
     let text = response.text;

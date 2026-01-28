@@ -59,6 +59,7 @@ export interface WritingEvaluation {
     };
     feedback: string;
     corrections: string;
+    error?: string;
 }
 
 export interface Attempt {
