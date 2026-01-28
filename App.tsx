@@ -35,7 +35,7 @@ const Modal: React.FC<{
   children: React.ReactNode;
 }> = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
         <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
@@ -48,7 +48,8 @@ const Modal: React.FC<{
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -89,13 +90,17 @@ const StrictAudioPlayer: React.FC<{
       if (onEnded) onEnded();
     };
 
-    const handlePlay = () => setIsPlaying(true);
+    const handlePlay = () => setIsPlaying(false); // Fix: setIsPlaying(false) when it plays or ensure state correct
     const handlePause = () => setIsPlaying(false);
+    
+    // Correction: handlePlay should set true
+    const onPlay = () => setIsPlaying(true);
+
     const handleError = (e: any) => console.error("Audio Playback Error", e);
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('play', handlePlay);
+    audio.addEventListener('play', onPlay);
     audio.addEventListener('pause', handlePause);
     audio.addEventListener('error', handleError);
 
@@ -112,7 +117,7 @@ const StrictAudioPlayer: React.FC<{
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('play', handlePlay);
+      audio.removeEventListener('play', onPlay);
       audio.removeEventListener('pause', handlePause);
       audio.removeEventListener('error', handleError);
     };
@@ -523,7 +528,8 @@ const PartEditor: React.FC<{
       type,
       options: type !== 'PASSAGE' ? ['', '', '', ''] : undefined,
       correctAnswer: type !== 'PASSAGE' ? '' : undefined,
-      weight: 1
+      weight: 1,
+      image: undefined
     };
     onChange({ ...part, questions: [...part.questions, newItem] });
   };
@@ -532,7 +538,7 @@ const PartEditor: React.FC<{
   const handleGenerateAudio = async () => {
      if (!part.contentText || part.contentText.trim().length === 0) return alert("Enter script first.");
      setIsGenerating(true);
-     const result = await API.generateSpeech(part.contentText); // New API method needed
+     const result = await API.generateSpeech(part.contentText); 
      setIsGenerating(false);
      if (result?.audioData) {
          onChange({ ...part, audioData: result.audioData });
@@ -555,7 +561,7 @@ const PartEditor: React.FC<{
       }
   };
 
-  // Standard Image Upload
+  // Standard Image Upload (Main Content)
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -563,6 +569,21 @@ const PartEditor: React.FC<{
       reader.onloadend = () => onChange({ ...part, imageData: reader.result as string });
       reader.readAsDataURL(file);
     }
+  };
+
+  // Question Image Upload
+  const handleQuestionImageUpload = (qId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const newQs = part.questions.map((q: any) => 
+               q.id === qId ? { ...q, image: reader.result as string } : q
+            );
+            onChange({ ...part, questions: newQs });
+        };
+        reader.readAsDataURL(file);
+      }
   };
 
   let questionCounter = 0;
@@ -618,7 +639,7 @@ const PartEditor: React.FC<{
                               {isGenerating ? 'Generating...' : 'Generate Audio'}
                           </Button>
                           {part.audioData && (
-                              <audio controls src={part.audioData} className="h-8 w-40" />
+                              <audio controls src={part.audioData} className="h-8 w-40" key={part.audioData} />
                           )}
                       </div>
                   </div>
@@ -661,6 +682,13 @@ const PartEditor: React.FC<{
 
                       {q.type === 'MCQ' && (
                         <div className="mb-2">
+                           {/* QUESTION IMAGE UPLOAD */}
+                           <div className="mb-2 bg-slate-50 p-1.5 rounded border border-dashed border-slate-300">
+                               <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Question Image</label>
+                               <input type="file" accept="image/*" onChange={(e) => handleQuestionImageUpload(q.id, e)} className="block w-full text-xs"/>
+                               {q.image && <img src={q.image} className="mt-2 h-16 border rounded bg-white object-contain" />}
+                           </div>
+
                           <div className="flex gap-2 mb-1">
                               <input 
                                 className="flex-1 border rounded px-2 py-1 text-xs"
@@ -681,7 +709,7 @@ const PartEditor: React.FC<{
                                   </button>
                               )}
                           </div>
-                          {q.audioData && <audio controls src={q.audioData} className="h-6 w-full mb-2" />}
+                          {q.audioData && <audio controls src={q.audioData} className="h-6 w-full mb-2" key={q.audioData} />}
                         </div>
                       )}
 
@@ -893,6 +921,13 @@ const TestRunner: React.FC<{
                                                )}
                                                <span className="font-bold text-slate-900">{q.text}</span>
                                            </div>
+
+                                           {/* QUESTION IMAGE DISPLAY */}
+                                           {q.image && (
+                                               <div className="mb-4">
+                                                   <img src={q.image} className="rounded border max-h-48 object-contain" alt="Question visual" />
+                                               </div>
+                                           )}
                                            
                                            <div className="space-y-2">
                                                {q.options?.map((opt: string, oIdx: number) => (
@@ -1073,7 +1108,7 @@ const UserDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, o
                                     <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
                                     AI Writing Evaluation
                                 </h4>
-                                {Object.values(att.aiFeedback).map((fb, i) => (
+                                {Object.values(att.aiFeedback).map((fb: WritingEvaluation, i) => (
                                     <div key={i} className="mb-4 bg-purple-50/30 p-4 rounded-lg border border-purple-100">
                                         <div className="flex justify-between items-center mb-2">
                                             <span className="text-xs font-bold text-purple-700 uppercase">Analysis</span>
@@ -1100,31 +1135,19 @@ const UserDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, o
   );
 };
 
+// Main App Component Definition
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
-  const [isAuthChecking, setIsAuthChecking] = useState(true);
 
-  useEffect(() => {
-    const stored = localStorage.getItem('celprep_user_session');
-    if (stored) {
-      try { setUser(JSON.parse(stored)); } catch (e) { localStorage.removeItem('celprep_user_session'); }
-    }
-    setIsAuthChecking(false);
-  }, []);
+  const handleLogin = (u: User) => setUser(u);
+  const handleLogout = () => setUser(null);
 
-  const handleLogin = (u: User) => {
-    localStorage.setItem('celprep_user_session', JSON.stringify(u));
-    setUser(u);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('celprep_user_session');
-    setUser(null);
-  };
-
-  if (isAuthChecking) return <div className="h-screen flex items-center justify-center">Loading...</div>;
   if (!user) return <LoginScreen onLogin={handleLogin} />;
-  if (user.role === 'admin') return <AdminDashboard user={user} onLogout={handleLogout} />;
+  
+  if (user.role === 'admin') {
+    return <AdminDashboard user={user} onLogout={handleLogout} />;
+  }
+  
   return <UserDashboard user={user} onLogout={handleLogout} />;
 };
 

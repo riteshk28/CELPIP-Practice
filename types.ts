@@ -20,6 +20,7 @@ export interface Question {
   correctAnswer?: string; // For auto-grading
   weight: number;
   audioData?: string; // Base64 audio for spoken questions
+  image?: string; // Base64 image for visual questions
 }
 
 export interface Part {

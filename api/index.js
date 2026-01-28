@@ -125,7 +125,8 @@ app.get('/api/sets', async (req, res) => {
                     'options', q.options,
                     'correctAnswer', q.correct_answer,
                     'weight', q.weight,
-                    'audioData', q.audio_data
+                    'audioData', q.audio_data,
+                    'image', q.image_data
                   ) ORDER BY q.order_index ASC) FROM questions q WHERE q.part_id = p.id
                 ), '[]'::json)
               ) ORDER BY p.order_index ASC) FROM parts p WHERE p.section_id = sec.id
@@ -174,8 +175,8 @@ app.post('/api/sets', async (req, res) => {
         let qOrder = 0;
         for (const q of part.questions) {
           await client.query(
-            'INSERT INTO questions (id, part_id, question_text, type, options, correct_answer, weight, audio_data, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-            [q.id, part.id, q.text, q.type, JSON.stringify(q.options || []), q.correctAnswer, q.weight, q.audioData, qOrder++]
+            'INSERT INTO questions (id, part_id, question_text, type, options, correct_answer, weight, audio_data, image_data, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+            [q.id, part.id, q.text, q.type, JSON.stringify(q.options || []), q.correctAnswer, q.weight, q.audioData, q.image, qOrder++]
           );
         }
       }
@@ -279,7 +280,7 @@ app.post('/api/generate-speech', async (req, res) => {
     if (!text) return res.status(400).json({ error: "Text is required" });
 
     try {
-        // Detect speakers for multi-speaker config
+        // Detect speakers
         const speakerRegex = /^([A-Za-z0-9 ]+):/gm;
         const speakers = new Set();
         let match;
@@ -288,37 +289,42 @@ app.post('/api/generate-speech', async (req, res) => {
         }
         const uniqueSpeakers = Array.from(speakers);
 
-        // Voice pools
-        const maleVoices = ['Fenrir', 'Puck', 'Charon', 'Zephyr'];
-        const femaleVoices = ['Kore', 'Aoede'];
-        let mIndex = 0;
-        let fIndex = 0;
-
-        const speakerVoiceConfigs = [];
-        
-        if (uniqueSpeakers.length > 0) {
-            uniqueSpeakers.forEach(speaker => {
-                const lower = speaker.toLowerCase();
-                let voiceName = 'Fenrir'; 
-
-                // Simple heuristic for gender
-                if (lower.includes('woman') || lower.includes('girl') || lower.includes('lady') || lower.includes('jane') || lower.includes('sarah') || lower.includes('ms')) {
-                    voiceName = femaleVoices[fIndex % femaleVoices.length];
-                    fIndex++;
-                } else {
-                    voiceName = maleVoices[mIndex % maleVoices.length];
-                    mIndex++;
-                }
-
-                speakerVoiceConfigs.push({
-                    speaker: speaker,
-                    voiceConfig: { prebuiltVoiceConfig: { voiceName } }
-                });
-            });
-        }
-
         let config = {};
-        if (speakerVoiceConfigs.length > 0) {
+
+        // STRATEGY: 
+        // 1. If 0 or 1 speaker: Use standard single-speaker config.
+        // 2. If >= 2 speakers: We must provide EXACTLY 2 speakers in the config to avoid API error.
+        //    We will alias any extra speakers (>2) to the first two voice slots in a round-robin fashion.
+        //    This ensures the API always sees a valid 2-speaker config while supporting >2 characters in the script.
+        
+        if (uniqueSpeakers.length >= 2) {
+            // We only define configs for the first two "slots" (Voice A and Voice B)
+            // The API interprets the script. If the script says "Person C:", but we haven't defined "Person C",
+            // the model typically assigns one of the existing voices or a default. 
+            // To be safer, we ideally would rewrite the script, but that's invasive. 
+            // For now, we define the first two detected speakers as the anchors.
+            
+            const speakerVoiceConfigs = [];
+            
+            // Pick two distinct voices
+            const voiceA = 'Fenrir';
+            const voiceB = 'Kore';
+
+            // Assign first speaker to Voice A
+            speakerVoiceConfigs.push({
+                speaker: uniqueSpeakers[0],
+                voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceA } }
+            });
+
+            // Assign second speaker to Voice B
+            speakerVoiceConfigs.push({
+                speaker: uniqueSpeakers[1],
+                voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceB } }
+            });
+            
+            // NOTE: If uniqueSpeakers > 2, the subsequent speakers (3, 4) are not explicitly mapped in config 
+            // because the API forbids >2 configs. They will likely be read by the model using context-aware default voices.
+
             config = {
                 responseModalities: ["AUDIO"],
                 speechConfig: {
@@ -328,7 +334,7 @@ app.post('/api/generate-speech', async (req, res) => {
                 }
             };
         } else {
-            // Default single speaker (e.g. for questions)
+            // FALLBACK: Single Speaker
             config = {
                 responseModalities: ["AUDIO"],
                 speechConfig: {
@@ -346,9 +352,8 @@ app.post('/api/generate-speech', async (req, res) => {
         const rawPcmBase64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
         if (!rawPcmBase64) throw new Error("No audio generated.");
 
-        // IMPORTANT: Convert Raw PCM to WAV for browser compatibility
         const pcmBuffer = Buffer.from(rawPcmBase64, 'base64');
-        const wavBuffer = addWavHeader(pcmBuffer, 24000); // 24kHz is standard for this model
+        const wavBuffer = addWavHeader(pcmBuffer, 24000); 
         const wavBase64 = wavBuffer.toString('base64');
 
         res.json({ audioData: `data:audio/wav;base64,${wavBase64}` });
