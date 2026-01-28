@@ -1,3 +1,4 @@
+
 import { PracticeSet, Attempt, User, WritingEvaluation } from '../types';
 
 // On Vercel, the backend is on the same domain, so we use a relative path.
@@ -114,23 +115,6 @@ export const API = {
         return await res.json();
     } catch (e) {
         console.error("Evaluation failed", e);
-        return null;
-    }
-  },
-
-  // Generate Speech from Text (New)
-  generateSpeech: async (text: string): Promise<string | null> => {
-    try {
-        const res = await fetch(`${API_URL}/generate-speech`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text }),
-        });
-        if (!res.ok) return null;
-        const data = await res.json();
-        return data.audioData;
-    } catch (e) {
-        console.error("TTS failed", e);
         return null;
     }
   }
