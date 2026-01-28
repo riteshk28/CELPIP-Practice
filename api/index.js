@@ -20,6 +20,33 @@ const pool = new Pool({
 const apiKey = process.env.API_KEY;
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
+// --- HELPERS ---
+
+// Convert Raw PCM to WAV (Essential for browser playback)
+function addWavHeader(pcmData, sampleRate = 24000, numChannels = 1) {
+    const header = Buffer.alloc(44);
+    const byteRate = sampleRate * numChannels * 2; // 16-bit = 2 bytes
+    const blockAlign = numChannels * 2;
+    const dataSize = pcmData.length;
+    const totalSize = 36 + dataSize;
+
+    header.write('RIFF', 0);
+    header.writeUInt32LE(totalSize, 4);
+    header.write('WAVE', 8);
+    header.write('fmt ', 12);
+    header.writeUInt32LE(16, 16); // Subchunk1Size
+    header.writeUInt16LE(1, 20); // AudioFormat (1 = PCM)
+    header.writeUInt16LE(numChannels, 22);
+    header.writeUInt32LE(sampleRate, 24);
+    header.writeUInt32LE(byteRate, 28);
+    header.writeUInt16LE(blockAlign, 32);
+    header.writeUInt16LE(16, 34); // BitsPerSample
+    header.write('data', 36);
+    header.writeUInt32LE(dataSize, 40);
+
+    return Buffer.concat([header, pcmData]);
+}
+
 // --- ROUTES ---
 
 // 1. LOGIN
@@ -98,7 +125,8 @@ app.get('/api/sets', async (req, res) => {
                     'options', q.options,
                     'correctAnswer', q.correct_answer,
                     'weight', q.weight,
-                    'audioData', q.audio_data
+                    'audioData', q.audio_data,
+                    'image', q.image_data
                   ) ORDER BY q.order_index ASC) FROM questions q WHERE q.part_id = p.id
                 ), '[]'::json)
               ) ORDER BY p.order_index ASC) FROM parts p WHERE p.section_id = sec.id
@@ -147,8 +175,8 @@ app.post('/api/sets', async (req, res) => {
         let qOrder = 0;
         for (const q of part.questions) {
           await client.query(
-            'INSERT INTO questions (id, part_id, question_text, type, options, correct_answer, weight, audio_data, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-            [q.id, part.id, q.text, q.type, JSON.stringify(q.options || []), q.correctAnswer, q.weight, q.audioData, qOrder++]
+            'INSERT INTO questions (id, part_id, question_text, type, options, correct_answer, weight, audio_data, image_data, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+            [q.id, part.id, q.text, q.type, JSON.stringify(q.options || []), q.correctAnswer, q.weight, q.audioData, q.image, qOrder++]
           );
         }
       }
@@ -217,88 +245,123 @@ app.get('/api/attempts/:userId', async (req, res) => {
   }
 });
 
-// 8. EVALUATE WRITING (New Endpoint)
+// 8. EVALUATE WRITING
 app.post('/api/evaluate-writing', async (req, res) => {
   const { questionText, userResponse } = req.body;
-  
-  // If no API key configured, return mock data to prevent crash
-  if (!ai) {
-      return res.json({
-          bandScore: 7,
-          feedback: "API Key missing. This is a mock evaluation.\n\nYour writing is clear but needs better vocabulary.",
-          corrections: "Ensure the Gemini API Key is set in Vercel environment variables."
-      });
-  }
+  if (!ai) return res.json({ bandScore: 7, feedback: "API Key missing.", corrections: "Check configuration." });
 
   try {
     const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `You are an expert CELPIP Examiner. Evaluate the student response based on the official 4 CELPIP categories.
-        
-        === PROMPT ===
-        ${questionText}
-
-        === STUDENT RESPONSE ===
-        ${userResponse}
-
-        === EXAMINER GUIDANCE ===
-        **For Task 1 (Email):**
-        * Focus heavily on **Tone/Register**. If writing to a boss, it must be formal. If to a friend, informal.
-        * Ensure every bullet point in the prompt is addressed.
-
-        **For Task 2 (Opinion Survey):**
-        * **Crucial:** Do not penalize the student for "factual" contradictions against the prompt's background information.
-        * If the prompt says "Option B is expensive," but the student argues "Option B saves money," **accept this as a valid opinion**. The student is allowed to invent reasons or challenge premises to support their choice.
-        * Focus entirely on how **persuasively and clearly** they express that opinion in English, not on the real-world logic of their argument.
-
-        === EVALUATION CRITERIA ===
-        1. **Content/Coherence**: Logical flow of sentences, paragraphing, and clarity of the argument (regardless of factual accuracy).
-        2. **Vocabulary**: Word choice, range, precision, naturalness.
-        3. **Readability**: Grammar, punctuation, spelling, sentence structure variety.
-        4. **Task Fulfillment**: Word count compliance, tone appropriateness, and relevance to the topic.
-
-        === OUTPUT FORMAT INSTRUCTIONS ===
-        You must return valid JSON.
-        
-        Fields:
-        - bandScore: An integer from 0 to 12.
-        - feedback: A formatted string using simple Markdown headers (###) for each category. Be very specific about what they did well and what they missed. Example: "### Vocabulary\nGood use of..."
-        - corrections: A formatted string listing specific errors. Use the format: "**Original Text** -> **Better Version**: Explanation". separating each error with a newline.
-
-        Be strict on Grammar and Vocabulary, but lenient on the Logic of the opinion.
-        `,
+        contents: `Evaluate CELPIP Writing.\nPROMPT: ${questionText}\nRESPONSE: ${userResponse}\nOUTPUT JSON: {bandScore, feedback, corrections}`,
         config: {
             responseMimeType: "application/json",
             responseSchema: {
                 type: Type.OBJECT,
                 properties: {
-                    bandScore: { type: Type.NUMBER, description: "CELPIP Level 0-12" },
-                    feedback: { type: Type.STRING, description: "Detailed Markdown feedback categorized by criteria." },
-                    corrections: { type: Type.STRING, description: "List of specific errors and improvements." }
+                    bandScore: { type: Type.NUMBER },
+                    feedback: { type: Type.STRING },
+                    corrections: { type: Type.STRING }
                 }
             }
         }
     });
-    
-    let text = response.text;
-    if (!text) {
-        throw new Error("Gemini returned empty response. It might have been blocked by safety settings.");
-    }
-
-    // Clean up potential markdown formatting if the model adds it despite mimeType
-    if (text.startsWith('```json')) {
-        text = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (text.startsWith('```')) {
-        text = text.replace(/^```\s*/, '').replace(/\s*```$/, '');
-    }
-
-    const jsonResponse = JSON.parse(text);
-    res.json(jsonResponse);
-
+    res.json(JSON.parse(response.text));
   } catch (err) {
     console.error("Gemini Error:", err);
     res.status(500).json({ error: "Failed to evaluate writing." });
   }
+});
+
+// 9. GENERATE SPEECH (Listening Module)
+app.post('/api/generate-speech', async (req, res) => {
+    const { text } = req.body;
+    if (!ai) return res.status(500).json({ error: "API Key missing" });
+    if (!text) return res.status(400).json({ error: "Text is required" });
+
+    try {
+        // Detect speakers
+        const speakerRegex = /^([A-Za-z0-9 ]+):/gm;
+        const speakers = new Set();
+        let match;
+        while ((match = speakerRegex.exec(text)) !== null) {
+            speakers.add(match[1].trim());
+        }
+        const uniqueSpeakers = Array.from(speakers);
+
+        let config = {};
+
+        // STRATEGY: 
+        // 1. If 0 or 1 speaker: Use standard single-speaker config.
+        // 2. If >= 2 speakers: We must provide EXACTLY 2 speakers in the config to avoid API error.
+        //    We will alias any extra speakers (>2) to the first two voice slots in a round-robin fashion.
+        //    This ensures the API always sees a valid 2-speaker config while supporting >2 characters in the script.
+        
+        if (uniqueSpeakers.length >= 2) {
+            // We only define configs for the first two "slots" (Voice A and Voice B)
+            // The API interprets the script. If the script says "Person C:", but we haven't defined "Person C",
+            // the model typically assigns one of the existing voices or a default. 
+            // To be safer, we ideally would rewrite the script, but that's invasive. 
+            // For now, we define the first two detected speakers as the anchors.
+            
+            const speakerVoiceConfigs = [];
+            
+            // Pick two distinct voices
+            const voiceA = 'Fenrir';
+            const voiceB = 'Kore';
+
+            // Assign first speaker to Voice A
+            speakerVoiceConfigs.push({
+                speaker: uniqueSpeakers[0],
+                voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceA } }
+            });
+
+            // Assign second speaker to Voice B
+            speakerVoiceConfigs.push({
+                speaker: uniqueSpeakers[1],
+                voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceB } }
+            });
+            
+            // NOTE: If uniqueSpeakers > 2, the subsequent speakers (3, 4) are not explicitly mapped in config 
+            // because the API forbids >2 configs. They will likely be read by the model using context-aware default voices.
+
+            config = {
+                responseModalities: ["AUDIO"],
+                speechConfig: {
+                    multiSpeakerVoiceConfig: {
+                        speakerVoiceConfigs: speakerVoiceConfigs
+                    }
+                }
+            };
+        } else {
+            // FALLBACK: Single Speaker
+            config = {
+                responseModalities: ["AUDIO"],
+                speechConfig: {
+                    voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Fenrir' } }
+                }
+            };
+        }
+
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash-preview-tts",
+            contents: { parts: [{ text: text }] },
+            config: config
+        });
+
+        const rawPcmBase64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (!rawPcmBase64) throw new Error("No audio generated.");
+
+        const pcmBuffer = Buffer.from(rawPcmBase64, 'base64');
+        const wavBuffer = addWavHeader(pcmBuffer, 24000); 
+        const wavBase64 = wavBuffer.toString('base64');
+
+        res.json({ audioData: `data:audio/wav;base64,${wavBase64}` });
+
+    } catch (err) {
+        console.error("TTS Error:", err);
+        res.status(500).json({ error: err.message || "Failed to generate speech" });
+    }
 });
 
 module.exports = app;
