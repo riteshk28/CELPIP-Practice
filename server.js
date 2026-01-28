@@ -249,48 +249,18 @@ app.get('/api/attempts/:userId', async (req, res) => {
 // 8. EVALUATE WRITING
 app.post('/api/evaluate-writing', async (req, res) => {
   const { questionText, userResponse } = req.body;
-  if (!ai) return res.json({ bandScore: 0, feedback: "API Key missing.", corrections: "System Error" });
-
-  // Simplified and focused system instruction for speed and utility
-  const systemInstruction = `You are a CELPIP Writing Examiner. Grade the response based on the CELPIP Performance Standards.
-
-  **Grading Categories:**
-  1. Content/Coherence
-  2. Vocabulary
-  3. Readability (Grammar/Syntax)
-  4. Task Fulfillment
-
-  **Instructions:**
-  - Assign a CLB Level (1-12) for each category.
-  - Be critical.
-  - **Output JSON only.**
-
-  **Output Schema Requirements:**
-  - bandScore: Rounded average CLB.
-  - scores: { content, vocabulary, readability, taskFulfillment }
-  - feedback: A concise summary of performance, mentioning 1 key strength and 1 key weakness for EACH category if possible.
-  - corrections: A bulleted list of the top 3-5 specific grammatical, lexical, or phrasing errors found in the text, along with the corrected version for each. Do NOT rewrite the entire text. Format: "* **Error:** [original] -> **Fix:** [correction] ([Reason])"`;
+  if (!ai) return res.json({ bandScore: 7, feedback: "API Key missing.", corrections: "Check configuration." });
 
   try {
     const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Task Instructions: ${questionText}\n\nCandidate Response: ${userResponse}`,
+        contents: `Evaluate CELPIP Writing.\nPROMPT: ${questionText}\nRESPONSE: ${userResponse}\nOUTPUT JSON: {bandScore, feedback, corrections}`,
         config: {
-            systemInstruction: systemInstruction,
             responseMimeType: "application/json",
             responseSchema: {
                 type: Type.OBJECT,
                 properties: {
                     bandScore: { type: Type.NUMBER },
-                    scores: {
-                        type: Type.OBJECT,
-                        properties: {
-                            content: { type: Type.NUMBER },
-                            vocabulary: { type: Type.NUMBER },
-                            readability: { type: Type.NUMBER },
-                            taskFulfillment: { type: Type.NUMBER }
-                        }
-                    },
                     feedback: { type: Type.STRING },
                     corrections: { type: Type.STRING }
                 }
@@ -314,7 +284,7 @@ app.post('/api/generate-speech', async (req, res) => {
     if (!text) return res.status(400).json({ error: "Text is required" });
 
     try {
-        // Detect speakers
+        // Detect speakers based on "Name:" pattern
         const speakerRegex = /^([A-Za-z0-9 ]+):/gm;
         const speakers = new Set();
         let match;

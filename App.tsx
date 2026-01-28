@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { User, PracticeSet, Attempt, QuestionType, WritingEvaluation } from './types';
@@ -208,205 +207,6 @@ const RichTextEditor: React.FC<{
         onBlur={(e) => onChange(e.currentTarget.innerHTML)}
         data-placeholder={placeholder}
       />
-    </div>
-  );
-};
-
-// --- EDITOR COMPONENTS ---
-
-const PartEditor: React.FC<{
-  part: any;
-  onChange: (p: any) => void;
-  onDelete: () => void;
-  sectionType: string;
-}> = ({ part, onChange, onDelete, sectionType }) => {
-  const update = (field: string, val: any) => onChange({ ...part, [field]: val });
-
-  const addQuestion = () => {
-    update('questions', [...part.questions, {
-      id: `q-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      partId: part.id,
-      text: '',
-      type: 'MCQ',
-      options: ['', '', '', ''],
-      correctAnswer: '',
-      weight: 1
-    }]);
-  };
-
-  const updateQuestion = (idx: number, q: any) => {
-    const newQs = [...part.questions];
-    newQs[idx] = q;
-    update('questions', newQs);
-  };
-
-  const removeQuestion = (idx: number) => {
-    update('questions', part.questions.filter((_: any, i: number) => i !== idx));
-  };
-
-  return (
-    <div className="bg-white p-4 rounded-lg border border-slate-200 mb-4 shadow-sm">
-      <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-2">
-         <h4 className="font-bold text-slate-700">Part Content</h4>
-         <Button variant="danger" size="sm" onClick={onDelete}>Delete Part</Button>
-      </div>
-      <div className="space-y-4">
-        <Input label="Instructions" value={part.instructions || ''} onChange={e => update('instructions', e.target.value)} />
-        <div>
-           <label className="block text-sm font-medium text-slate-700 mb-1">Content / Transcript</label>
-           <RichTextEditor value={part.contentText || ''} onChange={v => update('contentText', v)} className="min-h-[120px]" />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-           <Input label="Timer (sec)" type="number" value={part.timerSeconds} onChange={e => update('timerSeconds', parseInt(e.target.value))} />
-           {(sectionType === 'LISTENING' || sectionType === 'SPEAKING') && (
-              <Input label="Audio URL/Base64" value={part.audioData || ''} onChange={e => update('audioData', e.target.value)} />
-           )}
-           {(sectionType === 'READING' || sectionType === 'WRITING') && (
-              <Input label="Image URL/Base64" value={part.imageData || ''} onChange={e => update('imageData', e.target.value)} />
-           )}
-        </div>
-        
-        {sectionType !== 'WRITING' && sectionType !== 'SPEAKING' && (
-           <div className="bg-slate-50 p-3 rounded border border-slate-200">
-             <div className="flex justify-between items-center mb-2">
-                <label className="text-xs font-bold text-slate-500 uppercase">Questions ({part.questions.length})</label>
-                <Button size="sm" onClick={addQuestion}>+ Add Question</Button>
-             </div>
-             <div className="space-y-3">
-               {part.questions.map((q: any, i: number) => (
-                 <div key={q.id || i} className="bg-white p-3 rounded border border-slate-200 shadow-sm">
-                    <div className="flex gap-2 mb-2">
-                       <select className="border border-slate-300 rounded text-sm" value={q.type} onChange={e => updateQuestion(i, {...q, type: e.target.value})}>
-                          <option value="MCQ">MCQ</option>
-                          <option value="CLOZE">Cloze</option>
-                          <option value="PASSAGE">Passage</option>
-                       </select>
-                       <Input className="flex-1" placeholder={q.type === 'PASSAGE' ? 'Passage HTML with [[id]]' : 'Question Text / ID'} value={q.text} onChange={e => updateQuestion(i, {...q, text: e.target.value})} />
-                       <button onClick={() => removeQuestion(i)} className="text-red-500 font-bold hover:text-red-700 px-2">×</button>
-                    </div>
-                    {q.type !== 'PASSAGE' && (
-                      <div className="pl-2 border-l-2 border-slate-100 space-y-2">
-                         <div className="grid grid-cols-2 gap-2">
-                            {q.options?.map((opt: string, o: number) => (
-                               <Input key={o} placeholder={`Option ${o+1}`} value={opt} onChange={e => {
-                                  const ops = [...(q.options||[])]; ops[o] = e.target.value;
-                                  updateQuestion(i, {...q, options: ops});
-                               }} />
-                            ))}
-                         </div>
-                         <div className="flex gap-2">
-                            <Dropdown options={q.options||[]} value={q.correctAnswer||''} onChange={v => updateQuestion(i, {...q, correctAnswer: v})} placeholder="Correct Answer" className="flex-1" />
-                            <Input type="number" className="w-20" placeholder="Pts" value={q.weight} onChange={e => updateQuestion(i, {...q, weight: parseInt(e.target.value)})} />
-                            {sectionType === 'LISTENING' && (
-                                <Input className="flex-1" placeholder="Q Audio" value={q.audioData||''} onChange={e => updateQuestion(i, {...q, audioData: e.target.value})} />
-                            )}
-                         </div>
-                      </div>
-                    )}
-                 </div>
-               ))}
-             </div>
-           </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-const SetEditor: React.FC<{
-  set: PracticeSet;
-  onChange: (s: PracticeSet) => void;
-  onSave: () => void;
-  onCancel: () => void;
-  isSaving: boolean;
-}> = ({ set, onChange, onSave, onCancel, isSaving }) => {
-  const updateSection = (idx: number, s: any) => {
-    const secs = [...set.sections];
-    secs[idx] = s;
-    onChange({...set, sections: secs});
-  };
-  const addSection = () => {
-    onChange({...set, sections: [...set.sections, {
-      id: `sec-${Date.now()}`,
-      setId: set.id,
-      type: 'READING',
-      title: 'New Section',
-      parts: []
-    }]});
-  };
-  const removeSection = (idx: number) => {
-    if(!confirm("Delete section?")) return;
-    onChange({...set, sections: set.sections.filter((_, i) => i !== idx)});
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-100 flex flex-col">
-       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-30 shadow-sm">
-          <h2 className="font-bold text-xl text-slate-800">Edit Practice Set</h2>
-          <div className="flex gap-2">
-             <Button variant="outline" onClick={onCancel}>Cancel</Button>
-             <Button onClick={onSave} disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Changes'}</Button>
-          </div>
-       </header>
-       <div className="flex-1 overflow-y-auto p-6 max-w-5xl mx-auto w-full space-y-6">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-             <h3 className="font-bold text-slate-800 border-b pb-2">Set Details</h3>
-             <Input label="Title" value={set.title} onChange={e => onChange({...set, title: e.target.value})} />
-             <Input label="Description" value={set.description} onChange={e => onChange({...set, description: e.target.value})} />
-             <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={set.isPublished} onChange={e => onChange({...set, isPublished: e.target.checked})} className="w-5 h-5" />
-                <span className="font-medium text-slate-700">Published</span>
-             </label>
-          </div>
-          
-          <div className="space-y-4">
-             <div className="flex justify-between items-center">
-                <h3 className="font-bold text-xl text-slate-800">Sections</h3>
-                <Button onClick={addSection}>+ Add Section</Button>
-             </div>
-             {set.sections.map((sec, sIdx) => (
-                <div key={sec.id || sIdx} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                   <div className="bg-slate-50 px-6 py-3 border-b border-slate-200 flex justify-between items-center">
-                      <div className="flex items-center gap-3 flex-1">
-                         <span className="font-mono font-bold text-slate-400">#{sIdx+1}</span>
-                         <select className="font-bold text-sm border-slate-300 rounded" value={sec.type} onChange={e => updateSection(sIdx, {...sec, type: e.target.value})}>
-                            <option value="READING">READING</option>
-                            <option value="LISTENING">LISTENING</option>
-                            <option value="WRITING">WRITING</option>
-                            <option value="SPEAKING">SPEAKING</option>
-                         </select>
-                         <Input className="flex-1 bg-transparent border-none focus:ring-0" value={sec.title} onChange={e => updateSection(sIdx, {...sec, title: e.target.value})} />
-                      </div>
-                      <Button variant="danger" size="sm" onClick={() => removeSection(sIdx)}>Delete</Button>
-                   </div>
-                   <div className="p-4 bg-slate-100">
-                      {sec.parts.map((part, pIdx) => (
-                         <PartEditor 
-                            key={part.id || pIdx} 
-                            part={part} 
-                            sectionType={sec.type}
-                            onChange={p => {
-                               const newParts = [...sec.parts];
-                               newParts[pIdx] = p;
-                               updateSection(sIdx, {...sec, parts: newParts});
-                            }} 
-                            onDelete={() => {
-                               if(!confirm("Delete part?")) return;
-                               const newParts = sec.parts.filter((_, i) => i !== pIdx);
-                               updateSection(sIdx, {...sec, parts: newParts});
-                            }}
-                         />
-                      ))}
-                      <Button variant="secondary" className="w-full border-dashed border-2" onClick={() => {
-                         updateSection(sIdx, {...sec, parts: [...sec.parts, {
-                            id: `p-${Date.now()}`, sectionId: sec.id, contentText: '', instructions: '', questions: [], timerSeconds: 600
-                         }]});
-                      }}>+ Add Part</Button>
-                   </div>
-                </div>
-             ))}
-          </div>
-       </div>
     </div>
   );
 };
@@ -647,101 +447,904 @@ const AdminDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, 
   );
 };
 
-// --- TEST RUNNER HELPERS ---
+// 3. SET EDITOR
+const SetEditor: React.FC<{ 
+  set: PracticeSet; 
+  onChange: (s: PracticeSet) => void; 
+  onSave: () => void; 
+  onCancel: () => void;
+  isSaving: boolean;
+}> = ({ set, onChange, onSave, onCancel, isSaving }) => {
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(set.sections[0]?.id || null);
+
+  const addSection = (type: 'READING' | 'WRITING' | 'LISTENING') => {
+    const newSection = {
+      id: `sec-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      setId: set.id,
+      type,
+      title: `New ${type} Section`,
+      parts: []
+    };
+    onChange({ ...set, sections: [...set.sections, newSection] });
+    setActiveSectionId(newSection.id);
+  };
+
+  const updateSection = (sectionId: string, updates: Partial<any>) => {
+    const newSections = set.sections.map(s => s.id === sectionId ? { ...s, ...updates } : s);
+    onChange({ ...set, sections: newSections });
+  };
+
+  const deleteSection = (sectionId: string) => {
+    const newSections = set.sections.filter(s => s.id !== sectionId);
+    onChange({ ...set, sections: newSections });
+    if (activeSectionId === sectionId) setActiveSectionId(null);
+  };
+
+  const addPart = (sectionId: string) => {
+    const section = set.sections.find(s => s.id === sectionId);
+    if (!section) return;
+    
+    // Default timer for listening audio parts can be small, user can adjust
+    // ADDED RANDOM STRING TO ID TO PREVENT COLLISION
+    const newPart = {
+      id: `part-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      sectionId,
+      timerSeconds: section.type === 'LISTENING' ? 0 : 600, 
+      contentText: '',
+      questions: [],
+      instructions: section.type === 'LISTENING' ? 'Listen to the audio clip.' : 'Read the text and answer the questions.'
+    };
+    
+    const updatedSection = { ...section, parts: [...section.parts, newPart] };
+    updateSection(sectionId, updatedSection);
+  };
+
+  const activeSection = set.sections.find(s => s.id === activeSectionId);
+
+  return (
+    <div className="min-h-screen bg-slate-100 flex flex-col">
+      <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10 shadow-sm">
+        <div className="flex items-center gap-4">
+          <Button variant="outline" size="sm" onClick={onCancel} disabled={isSaving}>&larr; Back</Button>
+          <div className="h-6 w-px bg-slate-300"></div>
+          <div className="flex flex-col">
+             <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1">Set Title</label>
+             <input 
+               value={set.title} 
+               onChange={e => onChange({ ...set, title: e.target.value })}
+               className="font-bold text-lg border border-slate-300 rounded px-2 py-1 text-slate-900 bg-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-96"
+               placeholder="e.g. CELPIP Mock Test 1"
+               disabled={isSaving}
+             />
+          </div>
+        </div>
+        <div className="flex gap-4 items-center">
+           <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+             <input 
+               type="checkbox" 
+               checked={set.isPublished} 
+               onChange={e => onChange({ ...set, isPublished: e.target.checked })} 
+               className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+               disabled={isSaving}
+             />
+             Published
+           </label>
+           <Button onClick={onSave} className="shadow-blue-200 shadow-md min-w-[120px]" disabled={isSaving}>
+             {isSaving ? 'Saving...' : 'Save Changes'}
+           </Button>
+        </div>
+      </header>
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar: Sections List */}
+        <aside className="w-64 bg-white border-r border-slate-200 flex flex-col overflow-y-auto z-0">
+          <div className="p-4 border-b border-slate-100 bg-slate-50">
+            <h3 className="font-semibold text-slate-700 text-xs uppercase tracking-wider mb-3">Test Sections</h3>
+            <div className="grid grid-cols-2 gap-2">
+               <button onClick={() => addSection('READING')} disabled={isSaving} className="flex flex-col items-center justify-center p-2 text-xs bg-white border border-slate-200 rounded hover:border-blue-400 hover:text-blue-600 transition-colors shadow-sm disabled:opacity-50">
+                  <span className="font-bold">+ Reading</span>
+               </button>
+               <button onClick={() => addSection('WRITING')} disabled={isSaving} className="flex flex-col items-center justify-center p-2 text-xs bg-white border border-slate-200 rounded hover:border-green-400 hover:text-green-600 transition-colors shadow-sm disabled:opacity-50">
+                  <span className="font-bold">+ Writing</span>
+               </button>
+               <button onClick={() => addSection('LISTENING')} disabled={isSaving} className="flex flex-col items-center justify-center p-2 text-xs bg-white border border-slate-200 rounded hover:border-amber-400 hover:text-amber-600 transition-colors shadow-sm disabled:opacity-50">
+                  <span className="font-bold">+ Listening</span>
+               </button>
+            </div>
+          </div>
+          <div className="p-2 space-y-1">
+            {set.sections.map((section, idx) => (
+              <div 
+                key={section.id} 
+                className={`group flex items-center justify-between px-3 py-2 rounded-md cursor-pointer transition-all ${activeSectionId === section.id ? 'bg-blue-50 text-blue-700 shadow-sm border border-blue-100' : 'hover:bg-slate-50 text-slate-600 border border-transparent'}`}
+                onClick={() => !isSaving && setActiveSectionId(section.id)}
+              >
+                <div className="flex items-center gap-2 overflow-hidden">
+                   <span className="text-[10px] font-bold opacity-50 w-4">{idx + 1}.</span>
+                   <span className="text-sm font-medium truncate">{section.title}</span>
+                </div>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); deleteSection(section.id); }}
+                  disabled={isSaving}
+                  className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 px-1 transition-opacity disabled:opacity-0"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            ))}
+            {set.sections.length === 0 && <p className="text-xs text-slate-400 p-8 text-center italic">No sections yet.<br/>Add one to begin.</p>}
+          </div>
+        </aside>
+
+        {/* Main Content: Section Editor */}
+        <main className="flex-1 p-8 overflow-y-auto bg-slate-50/50">
+          {activeSection ? (
+            <div className="max-w-6xl mx-auto space-y-8 pb-20">
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Section Configuration</h3>
+                <Input 
+                  label="Section Title" 
+                  value={activeSection.title} 
+                  onChange={e => updateSection(activeSection.id, { title: e.target.value })} 
+                  className="bg-white text-slate-900"
+                  disabled={isSaving}
+                />
+              </div>
+
+              {/* Parts Editor */}
+              <div className="space-y-6">
+                <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                   <h3 className="text-lg font-bold text-slate-800">
+                     {activeSection.type === 'LISTENING' ? 'Listening Screens (Tasks)' : 'Content Parts & Timers'}
+                   </h3>
+                   <Button size="sm" variant="secondary" onClick={() => addPart(activeSection.id)} disabled={isSaving}>
+                     {activeSection.type === 'LISTENING' ? '+ Add Screen' : '+ Add Content'}
+                   </Button>
+                </div>
+                
+                {activeSection.parts.map((part, index) => (
+                  <PartEditor 
+                    key={part.id} 
+                    part={part} 
+                    index={index} 
+                    sectionType={activeSection.type}
+                    onChange={(updatedPart) => {
+                      const newParts = [...activeSection.parts];
+                      newParts[index] = updatedPart;
+                      updateSection(activeSection.id, { parts: newParts });
+                    }}
+                    onDelete={() => {
+                      const newParts = activeSection.parts.filter(p => p.id !== part.id);
+                      updateSection(activeSection.id, { parts: newParts });
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : (
+             <div className="flex h-full flex-col items-center justify-center text-slate-400">
+                <svg className="w-16 h-16 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                <p>Select a section to edit content</p>
+             </div>
+          )}
+        </main>
+      </div>
+    </div>
+  );
+};
+
+// 4. PART EDITOR (Inner component for SetEditor)
+const PartEditor: React.FC<{ 
+  part: any; 
+  index: number; 
+  sectionType: string;
+  onChange: (p: any) => void; 
+  onDelete: () => void; 
+}> = ({ part, index, sectionType, onChange, onDelete }) => {
+  const [timerMode, setTimerMode] = useState<'sec' | 'mmss'>('sec');
+  
+  // New State for Audio Generation
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [audioSourceMode, setAudioSourceMode] = useState<'UPLOAD' | 'GENERATE'>('UPLOAD');
+  const [generatingQ, setGeneratingQ] = useState<string | null>(null);
+
+  const [listeningScreenType, setListeningScreenType] = useState<'AUDIO' | 'QUESTIONS'>(
+    (sectionType === 'LISTENING' && !part.audioData && part.questions.length > 0) ? 'QUESTIONS' : 'AUDIO'
+  );
+
+  const addItem = (type: QuestionType) => {
+    // Unique ID for items
+    const newItem = {
+      id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      partId: part.id,
+      text: type === 'MCQ' ? '' : type === 'CLOZE' ? '' : '',
+      type,
+      options: type !== 'PASSAGE' ? ['', '', '', ''] : undefined,
+      correctAnswer: type !== 'PASSAGE' ? '' : undefined,
+      weight: 1
+    };
+    onChange({ ...part, questions: [...part.questions, newItem] });
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        onChange({ ...part, imageData: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        onChange({ ...part, audioData: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleGenerateAudio = async () => {
+     if (!part.contentText || part.contentText.trim().length === 0) return alert("Please enter the script text first.");
+     setIsGenerating(true);
+     const result = await API.generateSpeech(part.contentText); 
+     setIsGenerating(false);
+     if (result?.audioData) {
+         onChange({ ...part, audioData: result.audioData });
+     } else {
+         alert("Failed to generate audio. Check API key or connection.");
+     }
+  };
+
+  const handleGenerateQuestionAudio = async (qId: string, text: string) => {
+      if (!text) return alert("Enter question text first.");
+      setGeneratingQ(qId);
+      const result = await API.generateSpeech(text);
+      setGeneratingQ(null);
+      if (result?.audioData) {
+          const newQs = part.questions.map((q: any) => 
+              q.id === qId ? { ...q, audioData: result.audioData } : q
+          );
+          onChange({ ...part, questions: newQs });
+      } else {
+          alert("Failed to generate audio.");
+      }
+  };
+
+  const handleQuestionAudioUpload = (qId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const newQs = part.questions.map((q: any) => 
+            q.id === qId ? { ...q, audioData: reader.result as string } : q
+        );
+        onChange({ ...part, questions: newQs });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleOptionImageUpload = (qId: string, optIdx: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const newQs = part.questions.map((q: any) => {
+            if (q.id !== qId) return q;
+            const newOptions = [...q.options];
+            newOptions[optIdx] = reader.result as string; // Store base64 image
+            // If this option was correct, update answer
+            let newCorrect = q.correctAnswer;
+            return { ...q, options: newOptions, correctAnswer: newCorrect === q.options[optIdx] ? reader.result : newCorrect };
+        });
+        onChange({ ...part, questions: newQs });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const formatMMSS = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  const parseMMSS = (val: string) => {
+    if (val.includes(':')) {
+      const [m, s] = val.split(':').map(Number);
+      return (m || 0) * 60 + (s || 0);
+    }
+    return parseInt(val) || 0;
+  };
+
+  // Logic to calculate numbering for list items
+  let questionCounter = 0;
+  const numberedQuestions = part.questions.map((q: any) => {
+    if (q.type !== 'PASSAGE') {
+      questionCounter++;
+      return { ...q, displayNum: questionCounter };
+    }
+    return { ...q, displayNum: null };
+  });
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden transition-all hover:shadow-md">
+      {/* Header */}
+      <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex justify-between items-center">
+        <div className="flex items-center gap-2">
+           <span className="bg-white border border-slate-200 text-slate-500 text-xs font-bold px-2 py-0.5 rounded">
+             {sectionType === 'LISTENING' ? 'SCREEN ' : 'PART '} {index + 1}
+           </span>
+           <span className="text-xs text-slate-400">
+             {sectionType === 'READING' ? 'Passage & Questions' : sectionType === 'WRITING' ? 'Writing Prompt' : 'Listening Task'}
+           </span>
+        </div>
+        <div className="flex items-center gap-3">
+          {/* Timer is relevant for Question Screens in Listening, or all screens in Reading/Writing */}
+          {(sectionType !== 'LISTENING' || listeningScreenType === 'QUESTIONS') && (
+            <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-md overflow-hidden shadow-sm">
+              <div className="bg-slate-100 px-2 py-1 border-r border-slate-200">
+                 <span className="text-[10px] uppercase font-bold text-slate-500">Timer</span>
+              </div>
+              <input 
+                type="text" 
+                className="w-16 text-sm font-bold text-slate-700 outline-none text-center bg-white" 
+                value={timerMode === 'sec' ? part.timerSeconds : formatMMSS(part.timerSeconds)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (timerMode === 'sec') {
+                    onChange({ ...part, timerSeconds: parseInt(val) || 0 });
+                  }
+                }}
+                onBlur={(e) => {
+                   if (timerMode === 'mmss') {
+                      onChange({ ...part, timerSeconds: parseMMSS(e.target.value) });
+                   }
+                }}
+                placeholder={timerMode === 'mmss' ? "MM:SS" : "Seconds"}
+              />
+              <button 
+                onClick={() => setTimerMode(m => m === 'sec' ? 'mmss' : 'sec')}
+                className="px-2 py-1 text-[10px] bg-slate-50 hover:bg-slate-100 border-l border-slate-200 text-slate-500 font-medium transition-colors"
+                title="Toggle format"
+              >
+                {timerMode === 'sec' ? 'sec' : 'm:s'}
+              </button>
+            </div>
+          )}
+          <button onClick={onDelete} className="text-slate-400 hover:text-red-500 text-xs flex items-center gap-1 transition-colors ml-2">
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+          </button>
+        </div>
+      </div>
+      
+      {/* Editor Body */}
+      <div className="p-5 space-y-4">
+        {/* LISTENING SPECIFIC: Screen Type Selector */}
+        {sectionType === 'LISTENING' && (
+           <div className="flex gap-4 border-b border-slate-100 pb-4 mb-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                 <input 
+                    type="radio" 
+                    name={`screenType-${part.id}`} 
+                    checked={listeningScreenType === 'AUDIO'} 
+                    onChange={() => {
+                        setListeningScreenType('AUDIO');
+                        // Clear questions if switching to Audio mode to avoid confusion? 
+                        // No, let's keep data just in case, but hide UI.
+                        onChange({ ...part, timerSeconds: 0 }); // Usually no timer for listening part
+                    }}
+                    className="text-blue-600 focus:ring-blue-500"
+                 />
+                 <span className="text-sm font-bold text-slate-700">Audio Clip Screen</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                 <input 
+                    type="radio" 
+                    name={`screenType-${part.id}`} 
+                    checked={listeningScreenType === 'QUESTIONS'} 
+                    onChange={() => {
+                        setListeningScreenType('QUESTIONS');
+                        onChange({ ...part, audioData: undefined }); // Clear main audio if switching to Questions mode
+                    }}
+                    className="text-blue-600 focus:ring-blue-500"
+                 />
+                 <span className="text-sm font-bold text-slate-700">Question Set Screen</span>
+              </label>
+           </div>
+        )}
+
+         <Input 
+          label="Instructions for Student" 
+          value={part.instructions} 
+          onChange={e => onChange({ ...part, instructions: e.target.value })} 
+          placeholder={sectionType === 'LISTENING' ? "e.g. Listen to the conversation..." : "e.g. Read the following email..."}
+          className="text-sm bg-white text-slate-900"
+        />
+      
+        {/* Split Columns */}
+        <div className="grid grid-cols-2 gap-8 h-[600px]">
+           {/* LEFT COLUMN */}
+           <div className="flex flex-col space-y-4 h-full overflow-hidden">
+              {/* Only show Text Editor if NOT Listening (or if needed for Listening instructions context) */}
+              {sectionType !== 'LISTENING' && (
+                <div className="flex-1 flex flex-col min-h-0">
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Main Reading Passage</label>
+                    <RichTextEditor 
+                    className="w-full flex-1"
+                    value={part.contentText}
+                    onChange={val => onChange({ ...part, contentText: val })}
+                    placeholder="Paste the main reading passage here..."
+                    />
+                </div>
+              )}
+
+              {/* LISTENING: AUDIO GENERATION UI */}
+              {sectionType === 'LISTENING' && listeningScreenType === 'AUDIO' && (
+                  <div className="bg-amber-50/50 p-4 rounded-lg border border-amber-100 shrink-0 flex flex-col h-full overflow-hidden">
+                     <div className="flex justify-between items-center mb-4 border-b border-amber-200 pb-2">
+                        <label className="block text-sm font-bold text-amber-700 uppercase tracking-wider">Main Audio Clip</label>
+                        <div className="flex bg-white rounded-md border border-slate-200 p-0.5">
+                            <button 
+                                onClick={() => setAudioSourceMode('UPLOAD')} 
+                                className={`px-2 py-0.5 text-[10px] font-bold rounded ${audioSourceMode === 'UPLOAD' ? 'bg-amber-100 text-amber-800' : 'text-slate-500'}`}
+                            >
+                                Upload
+                            </button>
+                            <button 
+                                onClick={() => setAudioSourceMode('GENERATE')} 
+                                className={`px-2 py-0.5 text-[10px] font-bold rounded ${audioSourceMode === 'GENERATE' ? 'bg-amber-100 text-amber-800' : 'text-slate-500'}`}
+                            >
+                                Generate AI
+                            </button>
+                        </div>
+                     </div>
+                     
+                     {audioSourceMode === 'UPLOAD' ? (
+                        <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-amber-200 rounded-lg bg-white/50">
+                           {!part.audioData ? (
+                                <input type="file" accept="audio/*" onChange={handleAudioUpload} className="block w-full max-w-xs text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-amber-100 file:text-amber-700 hover:file:bg-amber-200"/>
+                           ) : (
+                                <div className="text-center w-full max-w-xs">
+                                    <audio controls src={part.audioData} className="w-full h-10 mb-2" />
+                                    <button onClick={() => onChange({ ...part, audioData: undefined })} className="text-xs text-red-500 hover:underline">Remove</button>
+                                </div>
+                           )}
+                        </div>
+                     ) : (
+                        <div className="flex-1 flex flex-col min-h-0">
+                             <textarea 
+                                className="flex-1 w-full p-3 border border-slate-200 rounded resize-none text-sm font-mono mb-2 focus:ring-2 focus:ring-amber-400 outline-none"
+                                placeholder={`Man: Hello, how are you?\nWoman: I'm good thanks.\n\n(Use "Name:" to distinguish speakers)`}
+                                value={part.contentText || ''}
+                                onChange={(e) => onChange({ ...part, contentText: e.target.value })}
+                             />
+                             <div className="flex justify-between items-center">
+                                 <div className="text-[10px] text-slate-400">
+                                     Supports multi-speaker generation.
+                                 </div>
+                                 <div className="flex gap-2">
+                                     {part.audioData && (
+                                         <audio controls src={part.audioData} className="h-8 w-40" />
+                                     )}
+                                     <Button size="sm" onClick={handleGenerateAudio} disabled={isGenerating}>
+                                         {isGenerating ? 'Generating...' : 'Generate Audio'}
+                                     </Button>
+                                 </div>
+                             </div>
+                        </div>
+                     )}
+                  </div>
+              )}
+
+              {/* Optional Reference Image */}
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shrink-0 mt-auto">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Reference Image (Optional)</label>
+                  {part.imageData && (
+                    <button 
+                      onClick={() => onChange({ ...part, imageData: undefined })}
+                      className="text-xs text-red-500 hover:text-red-700 font-medium"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                {!part.imageData ? (
+                  <input type="file" accept="image/*" onChange={handleImageUpload} className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+                ) : (
+                  <div className="relative group">
+                    <img src={part.imageData} alt="Preview" className="h-32 w-auto rounded border shadow-sm object-contain bg-white" />
+                  </div>
+                )}
+              </div>
+           </div>
+
+           {/* RIGHT COLUMN: Question List */}
+           <div className={`flex flex-col h-full overflow-hidden bg-slate-50 rounded-xl border border-slate-200 p-4 ${sectionType === 'LISTENING' && listeningScreenType === 'AUDIO' ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+              {/* Only enable questions if NOT Listening Audio Mode */}
+              {(sectionType === 'READING' || (sectionType === 'LISTENING' && listeningScreenType === 'QUESTIONS')) ? (
+                <>
+                   {/* Item List */}
+                   <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar mb-4">
+                     {numberedQuestions.length === 0 && (
+                        <div className="text-center py-8 text-slate-400 text-xs italic">
+                           Add Questions here.
+                        </div>
+                     )}
+                     {numberedQuestions.map((q: any, qIdx: number) => (
+                       <div key={q.id} className="bg-white p-3 rounded-lg border border-slate-200 text-sm shadow-sm hover:shadow-md transition-shadow">
+                          {/* Item Header */}
+                          <div className="flex justify-between items-center mb-2">
+                             <div className="flex items-center gap-2">
+                               {q.displayNum && (
+                                 <span className="bg-slate-800 text-white w-5 h-5 flex items-center justify-center rounded text-[10px] font-bold">{q.displayNum}</span>
+                               )}
+                               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                 {q.type === 'MCQ' ? 'Question (MCQ)' : q.type === 'PASSAGE' ? 'Passage Block' : 'Cloze Definition'}
+                               </span>
+                             </div>
+                             <button onClick={() => {
+                                const newQs = part.questions.filter((item: any) => item.id !== q.id);
+                                onChange({ ...part, questions: newQs });
+                             }} className="text-slate-300 hover:text-red-500 text-lg font-bold leading-none">&times;</button>
+                          </div>
+                          
+                          {/* PASSAGE TYPE */}
+                          {q.type === 'PASSAGE' && (
+                             <div className="relative">
+                               <RichTextEditor
+                                  className="w-full h-40"
+                                  value={q.text}
+                                  onChange={val => {
+                                    const newQs = [...part.questions];
+                                    newQs[qIdx].text = val;
+                                    onChange({ ...part, questions: newQs });
+                                  }}
+                                  placeholder={"Type passage here... Use [[1]], [[2]] for blanks."}
+                                />
+                                <div className="absolute bottom-1 right-1 text-[9px] text-slate-400 bg-white/90 px-1 rounded border border-slate-100 z-10 pointer-events-none">
+                                  Use <strong>[[ID]]</strong> for blanks
+                                </div>
+                             </div>
+                          )}
+
+                          {/* CLOZE TYPE */}
+                          {q.type === 'CLOZE' && (
+                            <div>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <label className="text-xs font-semibold text-slate-600">ID:</label>
+                                  <input 
+                                    className="w-20 border border-slate-300 rounded px-2 py-1 text-xs bg-white text-slate-900 focus:ring-1 focus:ring-blue-500"
+                                    placeholder="e.g. 1"
+                                    value={q.text}
+                                    onChange={e => {
+                                      const newQs = [...part.questions];
+                                      newQs[qIdx].text = e.target.value;
+                                      onChange({ ...part, questions: newQs });
+                                    }}
+                                  />
+                                  <span className="text-[10px] text-slate-400">Matches [[ID]] in passage</span>
+                               </div>
+                            </div>
+                          )}
+
+                          {/* MCQ TYPE */}
+                          {q.type === 'MCQ' && (
+                            <div className="mb-2">
+                              {/* Audio Upload for specific question */}
+                              {sectionType === 'LISTENING' && (
+                                  <div className="mb-2 flex items-center gap-2 bg-slate-50 p-1.5 rounded border border-slate-100">
+                                      {q.audioData ? (
+                                         <>
+                                            <audio controls src={q.audioData} className="h-6 w-32" />
+                                            <button onClick={() => {
+                                                const newQs = [...part.questions];
+                                                newQs[qIdx].audioData = undefined;
+                                                onChange({ ...part, questions: newQs });
+                                            }} className="text-[10px] text-red-500 hover:underline">Remove</button>
+                                         </>
+                                      ) : (
+                                         <div className="flex items-center gap-2 w-full">
+                                             <button 
+                                                className="text-[10px] bg-blue-50 text-blue-600 border border-blue-200 px-2 py-1 rounded font-bold hover:bg-blue-100"
+                                                onClick={() => handleGenerateQuestionAudio(q.id, q.text)}
+                                             >
+                                                {generatingQ === q.id ? '...' : '♫ Generate Audio'}
+                                             </button>
+                                             <span className="text-[10px] text-slate-400">or</span>
+                                             <label className="text-[10px] text-slate-500 cursor-pointer underline hover:text-blue-600">
+                                                 Upload File
+                                                 <input type="file" accept="audio/*" onChange={(e) => handleQuestionAudioUpload(q.id, e)} className="hidden" />
+                                             </label>
+                                         </div>
+                                      )}
+                                  </div>
+                              )}
+                              <input 
+                                className="w-full border border-slate-300 rounded px-2 py-1.5 text-xs bg-white text-slate-900 focus:ring-1 focus:ring-blue-500 mb-2"
+                                placeholder="Question Text (can be empty if audio is provided)"
+                                value={q.text}
+                                onChange={e => {
+                                  const newQs = [...part.questions];
+                                  newQs[qIdx].text = e.target.value;
+                                  onChange({ ...part, questions: newQs });
+                                }}
+                              />
+                            </div>
+                          )}
+
+                          {/* OPTIONS (For MCQ & CLOZE) */}
+                          {(q.type === 'MCQ' || q.type === 'CLOZE') && (
+                            <div className="space-y-1 pl-1">
+                               {q.options.map((opt: string, oIdx: number) => {
+                                 const isImageOption = opt.startsWith('data:image') || opt.startsWith('http');
+                                 return (
+                                 <div key={oIdx} className="flex items-center gap-2 mb-1">
+                                   <input 
+                                     type="radio" 
+                                     name={`correct-${q.id}`}
+                                     checked={q.correctAnswer === opt && opt !== ''}
+                                     onChange={() => {
+                                       const newQs = [...part.questions];
+                                       newQs[qIdx].correctAnswer = opt;
+                                       onChange({ ...part, questions: newQs });
+                                     }}
+                                     className="h-3 w-3 text-blue-600 cursor-pointer shrink-0"
+                                     title="Mark as correct"
+                                   />
+                                   
+                                   {/* Input or Image Preview */}
+                                   <div className="flex-1 flex gap-2">
+                                      {isImageOption ? (
+                                          <div className="relative group/img w-full">
+                                            <img src={opt} className="h-10 border rounded bg-slate-50 object-contain" alt="Option" />
+                                            <button 
+                                              onClick={() => {
+                                                const newQs = [...part.questions];
+                                                newQs[qIdx].options[oIdx] = '';
+                                                // Reset correct answer if it was this one
+                                                if (newQs[qIdx].correctAnswer === opt) newQs[qIdx].correctAnswer = '';
+                                                onChange({ ...part, questions: newQs });
+                                              }}
+                                              className="absolute top-0 right-0 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] opacity-0 group-hover/img:opacity-100 transition-opacity"
+                                            >
+                                              &times;
+                                            </button>
+                                          </div>
+                                      ) : (
+                                          <input 
+                                            className="flex-1 border border-slate-300 rounded px-2 py-1 text-xs bg-white text-slate-900 focus:border-blue-500 outline-none"
+                                            value={opt}
+                                            placeholder={`Option ${oIdx + 1}`}
+                                            onChange={e => {
+                                              const newQs = [...part.questions];
+                                              newQs[qIdx].options[oIdx] = e.target.value;
+                                              if (q.correctAnswer === opt) newQs[qIdx].correctAnswer = e.target.value;
+                                              onChange({ ...part, questions: newQs });
+                                            }}
+                                          />
+                                      )}
+                                      
+                                      {/* Image Upload Button for Option */}
+                                      <label className="cursor-pointer text-slate-400 hover:text-blue-500">
+                                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                          <input type="file" accept="image/*" className="hidden" onChange={(e) => handleOptionImageUpload(q.id, oIdx, e)} />
+                                      </label>
+                                   </div>
+                                 </div>
+                                )
+                               })}
+                               <button 
+                                 onClick={() => {
+                                    const newQs = [...part.questions];
+                                    newQs[qIdx].options.push('');
+                                    onChange({ ...part, questions: newQs });
+                                 }}
+                                 className="text-[10px] text-blue-600 hover:underline pl-5 font-medium"
+                               >
+                                 + Add Option
+                               </button>
+                            </div>
+                          )}
+                       </div>
+                     ))}
+                   </div>
+
+                   {/* Add Buttons */}
+                   <div className="grid grid-cols-3 gap-2 mt-auto pt-2 border-t border-slate-200">
+                     <button onClick={() => addItem('MCQ')} className="py-2 text-[10px] font-bold bg-white border border-slate-300 rounded hover:bg-slate-50 hover:text-blue-600 transition-colors shadow-sm text-slate-700">
+                       + MCQ
+                     </button>
+                     <button onClick={() => addItem('PASSAGE')} className="py-2 text-[10px] font-bold bg-white border border-slate-300 rounded hover:bg-slate-50 hover:text-purple-600 transition-colors shadow-sm text-slate-700">
+                       + Passage
+                     </button>
+                     <button onClick={() => addItem('CLOZE')} className="py-2 text-[10px] font-bold bg-white border border-slate-300 rounded hover:bg-slate-50 hover:text-amber-600 transition-colors shadow-sm text-slate-700">
+                       + Cloze Def
+                     </button>
+                   </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 text-xs text-center p-6 border-2 border-dashed border-slate-200 rounded-lg">
+                  <p>
+                    {sectionType === 'WRITING' ? 'Writing tasks: User gets a text area.' : 'Questions Disabled in Audio Mode'}
+                  </p>
+                </div>
+              )}
+           </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- TestRunner Helpers ---
 
 const ClozeRenderer: React.FC<{
   htmlContent: string;
   questions: any[];
-  answers: Record<string, any>;
+  answers: Record<string, string>;
   onAnswer: (id: string, val: string) => void;
 }> = ({ htmlContent, questions, answers, onAnswer }) => {
-  const parts = htmlContent.split(/(\[\[.*?\]\])/g);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [clozeLocations, setClozeLocations] = useState<{ id: string; element: Element }[]>([]);
+
+  // 1. Prepare HTML: Replace [[id]] with marker spans
+  const processedHtml = React.useMemo(() => {
+    // If content is just plain text with newlines (legacy data), convert to basic HTML
+    let content = htmlContent;
+    if (!content.includes('<') && content.includes('\n')) {
+       // It's likely plain text. Convert newlines to breaks/paragraphs.
+       // But to avoid double wrapping if we have mixed content, we do a simple check.
+       content = content.replace(/\n/g, '<br/>');
+    }
+
+    return content.replace(/\[\[\s*(\w+)\s*\]\]/g, (match, id) => {
+       return `<span id="cloze-slot-${id}" class="cloze-slot inline-block min-w-[120px] mx-1 align-middle"></span>`;
+    });
+  }, [htmlContent]);
+
+  // 2. Find markers after render
+  useLayoutEffect(() => {
+    if (containerRef.current) {
+      const slots = containerRef.current.querySelectorAll('.cloze-slot');
+      const locs: { id: string; element: Element }[] = [];
+      slots.forEach(slot => {
+        const id = slot.id.replace('cloze-slot-', '');
+        locs.push({ id, element: slot });
+      });
+      setClozeLocations(locs);
+    }
+  }, [processedHtml]);
 
   return (
-    <div className="leading-relaxed text-lg text-slate-800">
-      {parts.map((part, i) => {
-        if (part.startsWith('[[') && part.endsWith(']]')) {
-          const placeholderId = part.slice(2, -2);
-          const question = questions.find(q => q.text === placeholderId && q.type === 'CLOZE');
-          
-          if (!question) return <span key={i} className="text-red-500 font-bold">?</span>;
-
-          return (
-             <span key={i} className="inline-block mx-1 relative">
-                <span className="absolute -top-4 left-0 text-[10px] font-bold text-slate-400 bg-slate-100 px-1 rounded border border-slate-200">
-                  {question.displayNum}
-                </span>
-                <select
-                  className={`appearance-none border-b-2 bg-transparent py-0.5 px-2 font-bold text-blue-700 focus:outline-none focus:border-blue-600 transition-colors ${answers[question.id] ? 'border-blue-500 bg-blue-50' : 'border-slate-300'}`}
-                  value={answers[question.id] || ''}
-                  onChange={(e) => onAnswer(question.id, e.target.value)}
-                >
-                  <option value="" disabled>Select...</option>
-                  {question.options?.map((opt: string) => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-             </span>
-          );
+    <div className="relative">
+      <div 
+         ref={containerRef}
+         className="prose prose-slate max-w-none text-slate-800 leading-relaxed font-serif text-lg bg-slate-50 p-6 rounded-lg border border-slate-200 shadow-sm mb-6"
+         dangerouslySetInnerHTML={{ __html: processedHtml }}
+      />
+      {clozeLocations.map(loc => {
+        const question = questions.find(q => q.type === 'CLOZE' && q.text === loc.id);
+        if (!question) {
+             return createPortal(
+                 <span className="text-red-500 font-bold text-xs border border-red-300 bg-red-50 px-1 rounded">[[{loc.id}?]]</span>,
+                 loc.element
+             );
         }
-        return <span key={i} dangerouslySetInnerHTML={{ __html: part }} />;
+        return createPortal(
+          <Dropdown
+            options={question.options || []}
+            value={answers[question.id] || ''}
+            onChange={(val) => onAnswer(question.id, val)}
+            placeholder={`[${loc.id}]`}
+            className="w-full font-sans text-sm border-blue-200 bg-white shadow-sm"
+          />,
+          loc.element
+        );
       })}
     </div>
   );
 };
 
-const SectionReview: React.FC<{
-  section: any;
-  answers: Record<string, any>;
-  onContinue: () => void;
+
+// 5. TEST TAKER INTERFACE - REFACTORED FOR REVIEW
+const SectionReview: React.FC<{ 
+    section: any; 
+    answers: Record<string, any>; 
+    onContinue: () => void; 
 }> = ({ section, answers, onContinue }) => {
-  const allQuestions = section.parts.flatMap((p: any) => p.questions.filter((q: any) => q.type !== 'PASSAGE'));
-  const answeredCount = allQuestions.filter((q: any) => answers[q.id]).length;
+   // Calculate metrics
+   let correct = 0;
+   let total = 0;
+   const details: any[] = [];
 
-  return (
-    <div className="h-screen flex flex-col bg-white">
-      <header className="bg-white border-b border-slate-200 px-8 py-6 flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-slate-800">Section Review</h2>
-      </header>
-      <div className="flex-1 overflow-y-auto p-8 max-w-4xl mx-auto w-full">
-         <div className="bg-blue-50 p-6 rounded-xl border border-blue-100 mb-8 flex justify-between items-center">
-            <div>
-               <h3 className="font-bold text-blue-900 text-lg">You have reached the end of the {section.type} section.</h3>
-               <p className="text-blue-700">Please review your answers before proceeding. You cannot return to this section once you submit.</p>
-            </div>
-            <div className="text-right">
-               <div className="text-3xl font-bold text-blue-800">{answeredCount} / {allQuestions.length}</div>
-               <div className="text-xs font-bold text-blue-600 uppercase tracking-wider">Questions Answered</div>
-            </div>
-         </div>
+   section.parts.forEach((part: any, pIdx: number) => {
+      // Group details by Part to give context
+      const partDetails: any[] = [];
+      part.questions.forEach((q: any) => {
+         if (q.type === 'MCQ' || q.type === 'CLOZE') {
+            total++;
+            const isCorrect = answers[q.id] === q.correctAnswer;
+            if (isCorrect) correct++;
+            partDetails.push({ ...q, isCorrect, userAnswer: answers[q.id] });
+         }
+      });
+      if (partDetails.length > 0) {
+          details.push({ partTitle: `Part ${pIdx+1}`, questions: partDetails });
+      }
+   });
 
-         <div className="grid grid-cols-5 gap-4">
-            {allQuestions.map((q: any, i: number) => {
-               const isAnswered = !!answers[q.id];
-               return (
-                  <div key={q.id} className={`p-4 rounded border flex flex-col items-center justify-center gap-2 ${isAnswered ? 'bg-white border-green-200 shadow-sm' : 'bg-slate-50 border-slate-200'}`}>
-                     <span className="font-bold text-slate-500">Q{i+1}</span>
-                     {isAnswered ? (
-                        <div className="flex items-center gap-1 text-green-600 text-sm font-bold">
-                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                           Answered
-                        </div>
-                     ) : (
-                        <div className="flex items-center gap-1 text-amber-500 text-sm font-bold">
-                           <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                           Skipped
-                        </div>
-                     )}
-                  </div>
-               );
-            })}
-         </div>
-      </div>
-      <footer className="bg-white border-t border-slate-200 px-8 py-4 flex justify-end">
-        <Button size="lg" onClick={onContinue} className="shadow-blue-200 shadow-lg">Submit Section & Continue</Button>
-      </footer>
-    </div>
-  );
+   const percentage = total > 0 ? Math.round((correct / total) * 100) : 0;
+
+   return (
+     <div className="h-screen flex flex-col bg-slate-50">
+        <header className="bg-white border-b border-slate-200 px-8 py-6 flex justify-between items-center shadow-sm z-10">
+           <div>
+              <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Section Review: <span className="text-blue-600">{section.type}</span></h2>
+              <p className="text-slate-500 mt-1">Review your performance before moving to the next section.</p>
+           </div>
+           <div className="flex items-center gap-4">
+              <div className="text-right">
+                  <div className="text-3xl font-bold text-slate-900">{correct}<span className="text-slate-400 text-xl">/{total}</span></div>
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Total Score</div>
+              </div>
+              <div className={`h-12 w-12 rounded-full flex items-center justify-center font-bold border-4 ${percentage >= 80 ? 'border-green-500 text-green-600' : percentage >= 50 ? 'border-amber-500 text-amber-600' : 'border-red-500 text-red-600'}`}>
+                 {percentage}%
+              </div>
+           </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-8 space-y-8 max-w-5xl mx-auto w-full">
+            {details.map((group, idx) => (
+                <div key={idx} className="space-y-4">
+                    <h3 className="font-bold text-slate-400 uppercase tracking-wider text-xs border-b border-slate-200 pb-2">{group.partTitle}</h3>
+                    <div className="grid gap-4">
+                        {group.questions.map((item: any) => (
+                            <div key={item.id} className={`p-5 rounded-lg border flex justify-between items-start transition-all shadow-sm ${item.isCorrect ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                                <div className="space-y-2">
+                                    <p className="font-bold text-slate-800 text-sm">
+                                    {item.type === 'CLOZE' ? `Gap [${item.text}]` : item.text}
+                                    </p>
+                                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-6 text-xs">
+                                    <span className={`font-bold flex items-center gap-1 ${item.isCorrect ? "text-green-700" : "text-red-700"}`}>
+                                        Your Answer: <span className="bg-white/50 px-1 rounded">{item.userAnswer || '(Skipped)'}</span>
+                                    </span>
+                                    {!item.isCorrect && (
+                                        <span className="text-slate-600 font-medium flex items-center gap-1">
+                                            Correct Answer: <span className="bg-slate-200/50 px-1 rounded text-slate-800 font-bold">{item.correctAnswer}</span>
+                                        </span>
+                                    )}
+                                    </div>
+                                </div>
+                                <div className="shrink-0 ml-4">
+                                    {item.isCorrect ? (
+                                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-green-200 text-green-700">
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                                        </span>
+                                    ) : (
+                                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-red-200 text-red-700">
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ))}
+        </div>
+
+        <footer className="bg-white border-t border-slate-200 px-8 py-4 flex justify-end sticky bottom-0 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+            <Button size="lg" onClick={onContinue} className="shadow-blue-200 shadow-lg">Continue to Next Section &rarr;</Button>
+        </footer>
+     </div>
+   );
 };
 
 // --- NEW COMPONENT: WRITING EVALUATION VIEW ---
@@ -751,9 +1354,7 @@ const WritingEvaluationView: React.FC<{
     onExit: () => void;
 }> = ({ section, aiFeedback, onExit }) => {
     // Calculate average band score
-    const scores = Object.values(aiFeedback)
-        .filter(f => !f.error)
-        .map((f: WritingEvaluation) => f.bandScore);
+    const scores = Object.values(aiFeedback).map((f: WritingEvaluation) => f.bandScore);
     const averageScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
 
     // Helper to render simple text with bold markers (**text**) and headers (### text)
@@ -761,7 +1362,7 @@ const WritingEvaluationView: React.FC<{
         if (!text) return null;
         return text.split('\n').map((line, i) => {
             let cleanLine = line.trim();
-            if (!cleanLine) return <div key={i} className="h-2"></div>; 
+            if (!cleanLine) return <div key={i} className="h-2"></div>; // Preserve some spacing for empty lines
 
             // Header detection: ### Header OR **Header** (short, no colons)
             const isHeader = cleanLine.startsWith('###') || (cleanLine.startsWith('**') && cleanLine.endsWith('**') && cleanLine.length < 50 && !cleanLine.includes(':'));
@@ -824,55 +1425,14 @@ const WritingEvaluationView: React.FC<{
             <div className="flex-1 overflow-y-auto p-8 max-w-5xl mx-auto w-full space-y-8">
                 {section.parts.map((part: any, idx: number) => {
                     const feedback = aiFeedback[part.id];
-                    // If no feedback was found (e.g. timeout or error not caught properly), show generic error
-                    const isError = !feedback || feedback.error;
-
-                    if (isError) {
-                        return (
-                            <div key={part.id} className="bg-white rounded-xl shadow-sm border border-red-200 overflow-hidden">
-                                <div className="bg-red-50 px-6 py-4 border-b border-red-100 flex justify-between items-center">
-                                    <h3 className="font-bold text-red-800">Task {idx + 1}: Evaluation Failed</h3>
-                                </div>
-                                <div className="p-6 text-center text-red-600">
-                                    <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                    <p className="font-medium">The analysis for this task timed out or failed.</p>
-                                    <p className="text-sm opacity-70">Please check your internet connection and try again.</p>
-                                </div>
-                            </div>
-                        );
-                    }
+                    if (!feedback) return null;
 
                     return (
                         <div key={part.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                             <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
                                 <h3 className="font-bold text-slate-700">Task {idx + 1}: {part.instructions ? part.instructions.substring(0, 50) + "..." : "Writing Response"}</h3>
-                                <div className="flex items-center gap-4">
-                                    <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">Overall CLB: {feedback.bandScore}</span>
-                                </div>
+                                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">Score: {feedback.bandScore}</span>
                             </div>
-                            
-                            {/* NEW: Score Breakdown Panel */}
-                            {feedback.scores && (
-                                <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <div className="bg-white p-3 rounded border border-slate-200 text-center shadow-sm">
-                                        <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Content</div>
-                                        <div className="text-xl font-bold text-slate-700">{feedback.scores.content}</div>
-                                    </div>
-                                    <div className="bg-white p-3 rounded border border-slate-200 text-center shadow-sm">
-                                        <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Vocabulary</div>
-                                        <div className="text-xl font-bold text-slate-700">{feedback.scores.vocabulary}</div>
-                                    </div>
-                                    <div className="bg-white p-3 rounded border border-slate-200 text-center shadow-sm">
-                                        <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Readability</div>
-                                        <div className="text-xl font-bold text-slate-700">{feedback.scores.readability}</div>
-                                    </div>
-                                    <div className="bg-white p-3 rounded border border-slate-200 text-center shadow-sm">
-                                        <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Task Fulfillment</div>
-                                        <div className="text-xl font-bold text-slate-700">{feedback.scores.taskFulfillment}</div>
-                                    </div>
-                                </div>
-                            )}
-
                             <div className="p-6 grid md:grid-cols-2 gap-8">
                                 <div>
                                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 border-b border-slate-100 pb-2">Examiner Feedback</h4>
@@ -881,7 +1441,7 @@ const WritingEvaluationView: React.FC<{
                                     </div>
                                 </div>
                                 <div>
-                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 border-b border-slate-100 pb-2">Key Errors & Improvements</h4>
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 border-b border-slate-100 pb-2">Corrections & Improvements</h4>
                                     <div className="bg-amber-50 p-5 rounded-lg border border-amber-100 h-full text-amber-900">
                                         {renderFormattedText(feedback.corrections)}
                                     </div>
@@ -991,39 +1551,23 @@ const TestRunner: React.FC<{
   const analyzeWriting = async () => {
     setIsAnalyzing(true);
     const feedbackMap: Record<string, WritingEvaluation> = {};
+    
+    // Only analyze parts that belong to writing sections
     const writingSections = set.sections.filter(s => s.type === 'WRITING');
     
-    // Use Promise.all to run evaluations in parallel
-    const analysisPromises: Promise<void>[] = [];
-
     for (const sec of writingSections) {
         for (const p of sec.parts) {
+            // Use PART ID for retrieval, matching new storage logic
             const response = writingInputs[p.id]; 
             
             // Only send for evaluation if there is significant text
             if (response && response.trim().length > 10) {
-                 const promise = API.evaluateWriting(p.instructions + "\n" + p.contentText, response)
-                    .then(result => {
-                        if (result) {
-                            feedbackMap[p.id] = result;
-                        } else {
-                            // Explicitly handle null/fail from API layer
-                            feedbackMap[p.id] = { bandScore: 0, feedback: "", corrections: "", error: "Failed to evaluate." };
-                        }
-                    })
-                    .catch(err => {
-                        console.error("Failed part evaluation:", err);
-                        // Add error entry so UI knows it failed
-                        feedbackMap[p.id] = { bandScore: 0, feedback: "", corrections: "", error: "Timeout or Network Error" };
-                    });
-                 
-                 analysisPromises.push(promise);
+                 const result = await API.evaluateWriting(p.instructions + "\n" + p.contentText, response);
+                 if (result) {
+                     feedbackMap[p.id] = result;
+                 }
             }
         }
-    }
-    
-    if (analysisPromises.length > 0) {
-        await Promise.all(analysisPromises);
     }
     
     setAiFeedback(feedbackMap);
@@ -1066,8 +1610,7 @@ const TestRunner: React.FC<{
           // If multiple parts, average the band score.
           const partScores = sec.parts.map(p => {
              const feedback = aiFeedback[p.id];
-             // Ignore errors in score calculation
-             return (feedback && !feedback.error) ? (feedback as WritingEvaluation).bandScore : 0;
+             return feedback ? (feedback as WritingEvaluation).bandScore : 0;
           }).filter((s: number) => s > 0);
           
           const avg = partScores.length > 0 ? Math.round(partScores.reduce((a, b) => a + b, 0) / partScores.length) : 0;
