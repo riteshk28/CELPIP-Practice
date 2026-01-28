@@ -106,36 +106,21 @@ const StrictAudioPlayer: React.FC<{
     };
   }, [src, autoPlay, disabled]);
 
-  const togglePlay = () => {
-    const audio = audioRef.current;
-    if (!audio || disabled || hasEnded) return;
-
-    if (isPlaying) {
-      audio.pause();
-    } else {
-      audio.play();
-    }
-  };
-
   return (
     <div className={`bg-slate-800 p-4 rounded-lg shadow-md border border-slate-700 ${disabled ? 'opacity-60 grayscale' : ''}`}>
       <audio ref={audioRef} src={src} className="hidden" />
       
       <div className="flex items-center gap-4 mb-3">
         {/* Status Icon */}
-        <button 
-            onClick={togglePlay}
-            disabled={disabled || hasEnded}
-            className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all ${isPlaying ? 'bg-blue-500 animate-pulse' : 'bg-slate-600 hover:bg-slate-500'} ${disabled || hasEnded ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-        >
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isPlaying ? 'bg-blue-500 animate-pulse' : 'bg-slate-600'}`}>
           {isPlaying ? (
             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
           ) : hasEnded || disabled ? (
             <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
           ) : (
-             <svg className="w-5 h-5 text-slate-300 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /></svg>
+             <svg className="w-5 h-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /></svg>
           )}
-        </button>
+        </div>
         
         <div className="flex-1">
           <div className="text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
@@ -484,6 +469,8 @@ const SetEditor: React.FC<{
     const section = set.sections.find(s => s.id === sectionId);
     if (!section) return;
     
+    // Default timer for listening audio parts can be small, user can adjust
+    // ADDED RANDOM STRING TO ID TO PREVENT COLLISION
     const newPart = {
       id: `part-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       sectionId,
@@ -1485,6 +1472,9 @@ const TestRunner: React.FC<{
   }, [part]);
 
   useEffect(() => {
+    // Timer logic: 
+    // If it's an Audio Screen, we generally pause timer or let audio duration dictate flow (infinite time).
+    // If it's a Question Screen, we countdown.
     if (isAudioScreen || showReview || showEvaluation || isAnalyzing || timeLeft <= 0) {
        return; 
     }
@@ -1503,6 +1493,7 @@ const TestRunner: React.FC<{
   };
 
   const handleNext = () => {
+    // If on Audio screen, Next acts as "Skip Audio" or "Continue" if done.
     if (isAudioScreen) {
         if (confirm("Skip audio and continue?")) {
             // just proceed
@@ -1511,8 +1502,10 @@ const TestRunner: React.FC<{
         }
     }
 
+    // Check if we are at the end of the section
     const isLastPart = currentPartIndex === section.parts.length - 1;
     
+    // READING / LISTENING REVIEW
     if (isLastPart && (section.type === 'READING' || section.type === 'LISTENING') && !showReview) {
         setShowReview(true);
         return;
@@ -1521,9 +1514,11 @@ const TestRunner: React.FC<{
     if (currentPartIndex < section.parts.length - 1) {
       setCurrentPartIndex(prev => prev + 1);
     } else if (currentSectionIndex < set.sections.length - 1) {
+      // Moving to next section
       setCurrentSectionIndex(prev => prev + 1);
       setCurrentPartIndex(0);
     } else {
+      // Test Finished
       finishTest();
     }
   };
@@ -1541,11 +1536,16 @@ const TestRunner: React.FC<{
   const analyzeWriting = async () => {
     setIsAnalyzing(true);
     const feedbackMap: Record<string, WritingEvaluation> = {};
+    
+    // Only analyze parts that belong to writing sections
     const writingSections = set.sections.filter(s => s.type === 'WRITING');
     
     for (const sec of writingSections) {
         for (const p of sec.parts) {
+            // Use PART ID for retrieval, matching new storage logic
             const response = writingInputs[p.id]; 
+            
+            // Only send for evaluation if there is significant text
             if (response && response.trim().length > 10) {
                  const result = await API.evaluateWriting(p.instructions + "\n" + p.contentText, response);
                  if (result) {
@@ -1554,12 +1554,14 @@ const TestRunner: React.FC<{
             }
         }
     }
+    
     setAiFeedback(feedbackMap);
     setIsAnalyzing(false);
     setShowEvaluation(true);
   };
 
   const finishTest = async () => {
+    // If it's a writing test involved, trigger AI analysis before final submission
     const hasWriting = set.sections.some(s => s.type === 'WRITING');
     if (hasWriting && !showEvaluation) {
         await analyzeWriting();
@@ -1575,6 +1577,7 @@ const TestRunner: React.FC<{
         let secScore = 0;
         sec.parts.forEach(p => {
           p.questions.forEach(q => {
+            // Only count MCQs and CLOZE definitions as scorable questions
             if (q.type !== 'PASSAGE') {
               totalQuestions++;
               if (answers[q.id] === q.correctAnswer) {
@@ -1587,10 +1590,14 @@ const TestRunner: React.FC<{
         scores[sec.id] = secScore;
       }
       if (sec.type === 'WRITING') {
+          // Use AI score if available, otherwise default 0
+          // Sum up part scores? Average them?
+          // If multiple parts, average the band score.
           const partScores = sec.parts.map(p => {
              const feedback = aiFeedback[p.id];
              return feedback ? (feedback as WritingEvaluation).bandScore : 0;
           }).filter((s: number) => s > 0);
+          
           const avg = partScores.length > 0 ? Math.round(partScores.reduce((a, b) => a + b, 0) / partScores.length) : 0;
           scores[sec.id] = avg; 
       }
@@ -1600,6 +1607,11 @@ const TestRunner: React.FC<{
     onComplete(results);
   };
 
+  // Logic to calculate numbering for displayed questions (skipping Passages)
+  // We need to calculate this once upfront so numbers are consistent across the whole SECTION
+  // However, in this view, we only render questions for the CURRENT PART. 
+  // IMPORTANT: For Listening, questions are split across parts. We should probably number them 1..N per part, or global?
+  // Let's stick to Part-based numbering for now as it's simpler.
   let questionCounter = 0;
   const numberedQuestions = part ? part.questions.map((q: any) => {
      if (q.type !== 'PASSAGE') {
@@ -1609,6 +1621,7 @@ const TestRunner: React.FC<{
      return { ...q, displayNum: null };
   }) : [];
 
+  // Helper to safely render plain text or HTML content for the main left pane
   const renderMainContent = (content: string) => {
       if (!content) return null;
       if (content.includes('<') && content.includes('>')) {
@@ -1622,7 +1635,9 @@ const TestRunner: React.FC<{
           <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-center p-8">
               <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-6"></div>
               <h2 className="text-2xl font-bold text-slate-800 mb-2">Analyzing your Writing...</h2>
-              <p className="text-slate-500 max-w-md">Gemini AI is evaluating your response...</p>
+              <p className="text-slate-500 max-w-md">
+                  Gemini AI is evaluating your response against CELPIP criteria for coherence, vocabulary, and grammar. This may take a few seconds.
+              </p>
           </div>
       );
   }
@@ -1630,7 +1645,7 @@ const TestRunner: React.FC<{
   if (showEvaluation) {
       return (
         <WritingEvaluationView 
-            section={set.sections.find(s => s.type === 'WRITING') || section} 
+            section={set.sections.find(s => s.type === 'WRITING') || section} // Pass the writing section (or current if it is writing)
             aiFeedback={aiFeedback} 
             onExit={finishTest} 
         />
@@ -1645,6 +1660,7 @@ const TestRunner: React.FC<{
 
   return (
     <div className="h-screen flex flex-col bg-white">
+      {/* Test Header */}
       <header className="bg-slate-900 text-white px-6 py-3 flex justify-between items-center shadow-lg z-20">
         <div>
           <h2 className="text-lg font-bold tracking-wide">{section.type} SECTION</h2>
@@ -1666,6 +1682,7 @@ const TestRunner: React.FC<{
         </div>
       </header>
 
+      {/* VIEW: AUDIO SCREEN (Listening Phase) */}
       {isAudioScreen && (
           <div className="flex-1 flex flex-col items-center justify-center bg-slate-100 p-8 text-center animate-in fade-in duration-500">
              <div className="max-w-2xl w-full bg-white p-12 rounded-2xl shadow-xl border border-slate-200">
@@ -1674,17 +1691,24 @@ const TestRunner: React.FC<{
                 </div>
                 <h2 className="text-2xl font-bold text-slate-900 mb-2">Listen to the recording</h2>
                 <p className="text-slate-500 mb-8">{part.instructions || "The test timer is paused while the audio is playing."}</p>
+                
                 {part.audioData && (
                     <div className="max-w-md mx-auto">
-                        <StrictAudioPlayer src={part.audioData} />
+                        <StrictAudioPlayer 
+                            src={part.audioData} 
+                            // Auto-advance is optional, maybe too jarring. Let user click Next.
+                            // onEnded={() => {}} 
+                        />
                     </div>
                 )}
              </div>
           </div>
       )}
 
+      {/* VIEW: QUESTION / CONTENT SCREEN */}
       {!isAudioScreen && (
         <div className="flex-1 flex overflow-hidden animate-in fade-in duration-300">
+            {/* Left Pane: Instructions -> Text -> Image */}
             <div className="w-1/2 p-8 overflow-y-auto border-r border-slate-200 bg-slate-50 scroll-smooth">
             <div className="mb-8">
                 {part.instructions && (
@@ -1694,21 +1718,12 @@ const TestRunner: React.FC<{
                     </div>
                 )}
                 
+                {/* For Listening Question Screens, we show a "Audio Completed" placeholder if user wants context */}
                 {section.type === 'LISTENING' && (
                     <div className="mb-6 opacity-70 border border-slate-300 rounded-lg p-4 bg-slate-200 text-center text-slate-500 text-xs font-bold uppercase tracking-wider">
                        Audio Recording Completed
                     </div>
                 )}
-
-                {section.type === 'LISTENING' && numberedQuestions.map((q: any) => q.audioData ? (
-                    <div key={`left-audio-${q.id}`} className="mb-6 bg-white p-4 rounded-lg border border-blue-100 shadow-sm">
-                        <div className="flex items-center gap-2 mb-2">
-                            <span className="bg-slate-800 text-white w-5 h-5 rounded flex items-center justify-center text-xs font-bold">{q.displayNum}</span>
-                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Question Audio</span>
-                        </div>
-                        <StrictAudioPlayer src={q.audioData} autoPlay={true} />
-                    </div>
-                ) : null)}
 
                 <div className="mb-6">
                     {renderMainContent(part.contentText)}
@@ -1720,6 +1735,7 @@ const TestRunner: React.FC<{
             </div>
             </div>
 
+            {/* Right Pane: Questions (MCQ) and Passages */}
             <div className="w-1/2 p-8 overflow-y-auto bg-white scroll-smooth relative">
             {(section.type === 'READING' || section.type === 'LISTENING') ? (
                 <div className="space-y-6 pb-12">
@@ -1737,13 +1753,15 @@ const TestRunner: React.FC<{
                         );
                     }
                     if (q.type === 'CLOZE') {
-                        return null; 
+                        return null; // Don't render cloze definitions directly in list
                     }
+                    // Standard MCQ
                     return (
                         <div key={q.id} className="p-5 rounded-xl border border-slate-100 hover:border-blue-200 transition-all shadow-sm hover:shadow-md bg-white group">
                             <div className="font-semibold text-slate-900 mb-4 flex gap-3 items-start">
                             <span className="bg-slate-800 text-white w-7 h-7 rounded flex items-center justify-center text-sm font-bold shrink-0 mt-0.5">{q.displayNum}</span>
                             <div className="flex-1">
+                                {/* Specific Question Audio */}
                                 {q.audioData && (
                                     <div className="mb-2">
                                         <StrictAudioPlayer src={q.audioData} autoPlay={false} />
@@ -1803,223 +1821,310 @@ const TestRunner: React.FC<{
   );
 };
 
-// --- MAIN APP COMPONENT ---
+// 6. USER DASHBOARD
+const UserDashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLogout }) => {
+  const [activeTab, setActiveTab] = useState<'practice' | 'progress'>('practice');
+  const [view, setView] = useState<'HOME' | 'TEST'>('HOME');
+  const [selectedSet, setSelectedSet] = useState<PracticeSet | null>(null);
+  const [history, setHistory] = useState<Attempt[]>([]);
+  const [sets, setSets] = useState<PracticeSet[]>([]);
 
-const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [availableSets, setAvailableSets] = useState<PracticeSet[]>([]);
-  const [userAttempts, setUserAttempts] = useState<Attempt[]>([]);
-  const [activeSet, setActiveSet] = useState<PracticeSet | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Selection Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [configSet, setConfigSet] = useState<PracticeSet | null>(null);
+  const [selectedSections, setSelectedSections] = useState<Set<string>>(new Set());
 
-  // Initial check for session could go here
   useEffect(() => {
-    // For now, we rely on the Login screen. 
-    // In a real app, we'd check localStorage or an auth token.
-  }, []);
+    API.getAttempts(user.id).then(setHistory);
+    API.getSets().then((data) => {
+      setSets(data.filter(s => s.isPublished));
+    });
+  }, [user.id, view]);
 
-  const handleLogin = async (loggedInUser: User) => {
-    setUser(loggedInUser);
-    if (loggedInUser.role === 'user') {
-       await loadUserDashboard(loggedInUser.id);
+  // Handle clicking "Start Practice"
+  const openConfigModal = (set: PracticeSet) => {
+    setConfigSet(set);
+    // Default: Select all sections
+    setSelectedSections(new Set(set.sections.map(s => s.id)));
+    setIsModalOpen(true);
+  };
+
+  const toggleSection = (sectionId: string) => {
+    const newSelection = new Set(selectedSections);
+    if (newSelection.has(sectionId)) {
+      newSelection.delete(sectionId);
+    } else {
+      newSelection.add(sectionId);
     }
+    setSelectedSections(newSelection);
   };
 
-  const loadUserDashboard = async (userId: string) => {
-     setLoading(true);
-     const sets = await API.getSets();
-     // Filter published sets for users
-     setAvailableSets(sets.filter(s => s.isPublished));
-     
-     const attempts = await API.getAttempts(userId);
-     setUserAttempts(attempts);
-     setLoading(false);
-  };
+  const startTest = () => {
+    if (!configSet) return;
+    
+    // Filter the set to only include selected sections
+    const filteredSections = configSet.sections.filter(s => selectedSections.has(s.id));
+    
+    // Create a runtime copy of the set with only selected sections
+    const runtimeSet = {
+      ...configSet,
+      sections: filteredSections
+    };
 
-  const handleLogout = () => {
-    setUser(null);
-    setActiveSet(null);
-    setAvailableSets([]);
-    setUserAttempts([]);
-  };
-
-  const handleStartTest = (set: PracticeSet) => {
-     setActiveSet(set);
+    setSelectedSet(runtimeSet);
+    setIsModalOpen(false);
+    setView('TEST');
   };
 
   const handleTestComplete = async (results: any) => {
-     if (!user || !activeSet) return;
-     
-     // Calculate a simple average band score if not provided
-     // (In reality, CELPIP scoring is complex, this is a placeholder)
-     let totalBand = 0;
-     let count = 0;
-     Object.values(results.sectionScores).forEach((s: any) => {
-         if (typeof s === 'number') {
-             totalBand += s;
-             count++;
-         }
-     });
-     // If writing feedback exists, include it
-     if (results.aiFeedback) {
-         Object.values(results.aiFeedback).forEach((f: any) => {
-             totalBand += f.bandScore;
-             count++;
-         });
-     }
-     
-     const finalBand = count > 0 ? Math.round(totalBand / count) : 0;
+    // Only happens if selectedSet is not null
+    if (!selectedSet) return;
 
-     const attempt: Attempt = {
-        id: `att-${Date.now()}`,
-        userId: user.id,
-        setId: activeSet.id,
-        setTitle: activeSet.title,
-        date: new Date().toISOString(),
-        sectionScores: results.sectionScores,
-        bandScore: finalBand,
-        aiFeedback: results.aiFeedback
-     };
-
-     await API.saveAttempt(attempt);
-     setActiveSet(null);
-     await loadUserDashboard(user.id);
+    const newAttempt: Attempt = {
+      id: `att-${Date.now()}`,
+      userId: user.id,
+      setId: selectedSet.id,
+      setTitle: selectedSet.title,
+      date: new Date().toLocaleDateString(),
+      sectionScores: results.sectionScores,
+      bandScore: Math.min(12, Math.round((results.totalCorrect / results.totalPossible) * 12) || 0),
+      aiFeedback: results.aiFeedback
+    };
+    
+    await API.saveAttempt(newAttempt);
+    setView('HOME');
+    setSelectedSet(null);
   };
 
-  // RENDER LOGIC
+  if (view === 'TEST' && selectedSet) {
+    return <TestRunner set={selectedSet} onComplete={handleTestComplete} onExit={() => setView('HOME')} />;
+  }
+
+  // Helper to resolve section type from loaded sets for chart visualization
+  const getSectionType = (setId: string, sectionId: string) => {
+    const set = sets.find(s => s.id === setId);
+    const sec = set?.sections.find(s => s.id === sectionId);
+    return sec?.type;
+  };
+
+  // Prepare chart data with individual section trends
+  // Data structure: [{ date: '...', READING: 10, WRITING: 8 }, ...]
+  const chartData = history.map(h => {
+    const point: any = { date: h.date, name: h.setTitle };
+    Object.entries(h.sectionScores).forEach(([secId, score]) => {
+      const type = getSectionType(h.setId, secId);
+      if (type) {
+        // Plotting raw score for now as band conversion happens elsewhere or needs schema update
+        point[type] = score;
+      }
+    });
+    return point;
+  }).reverse(); // Sort oldest to newest
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans">
+      <nav className="bg-white shadow-sm border-b border-slate-200 px-6 py-4 sticky top-0 z-10">
+        <div className="max-w-6xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">CP</div>
+            <h1 className="font-bold text-xl text-slate-900 tracking-tight">CELPrep Master</h1>
+          </div>
+          <div className="flex items-center gap-4">
+             <span className="text-sm font-medium text-slate-600 hidden sm:block">Welcome, {user.name}</span>
+             <Button variant="outline" size="sm" onClick={onLogout}>Sign Out</Button>
+          </div>
+        </div>
+      </nav>
+
+      {/* TABS NAVIGATION */}
+      <div className="bg-white border-b border-slate-200">
+         <div className="max-w-6xl mx-auto px-6 flex gap-8">
+            <button 
+              onClick={() => setActiveTab('practice')}
+              className={`py-4 text-sm font-bold border-b-2 transition-colors ${activeTab === 'practice' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+            >
+              Practice Sets
+            </button>
+            <button 
+              onClick={() => setActiveTab('progress')}
+              className={`py-4 text-sm font-bold border-b-2 transition-colors ${activeTab === 'progress' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+            >
+              My Progress
+            </button>
+         </div>
+      </div>
+
+      <main className="max-w-6xl mx-auto p-6 space-y-10 pb-20">
+        
+        {/* TAB: MY PROGRESS */}
+        {activeTab === 'progress' && (
+          <section className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="flex justify-between items-end mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900">Your Progress</h2>
+                <p className="text-slate-500 text-sm mt-1">Track your band scores across different sections over time.</p>
+              </div>
+            </div>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-96">
+               {chartData.length > 0 ? (
+                 <ResponsiveContainer width="100%" height="100%">
+                   <LineChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                     <XAxis dataKey="date" tick={{fontSize: 12, fill: '#94a3b8'}} axisLine={false} tickLine={false} dy={10} />
+                     <YAxis domain={[0, 12]} tick={{fontSize: 12, fill: '#94a3b8'}} axisLine={false} tickLine={false} />
+                     <Tooltip 
+                        contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
+                     />
+                     <Legend wrapperStyle={{paddingTop: '20px'}} iconType="circle" />
+                     <Line type="monotone" dataKey="READING" stroke="#3b82f6" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                     <Line type="monotone" dataKey="WRITING" stroke="#10b981" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                     <Line type="monotone" dataKey="LISTENING" stroke="#f59e0b" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                     <Line type="monotone" dataKey="SPEAKING" stroke="#8b5cf6" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
+                   </LineChart>
+                 </ResponsiveContainer>
+               ) : (
+                 <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                   <svg className="w-12 h-12 mb-2 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                   <p>No test history available yet.</p>
+                   <p className="text-sm">Complete a test to see your band score trend.</p>
+                 </div>
+               )}
+            </div>
+          </section>
+        )}
+
+        {/* TAB: PRACTICE SETS */}
+        {activeTab === 'practice' && (
+          <section className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+              Available Practice Sets
+              <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">{sets.length}</span>
+            </h2>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {sets.map(set => (
+                <div 
+                  key={set.id} 
+                  className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col hover:shadow-lg transition-all"
+                >
+                  <div className="h-1.5 bg-gradient-to-r from-blue-500 to-purple-500 w-full"></div>
+                  {/* Card Body - Clickable to Start (Opens Modal) */}
+                  <div 
+                    className="p-6 cursor-pointer hover:bg-slate-50 transition-colors flex-1"
+                    onClick={() => openConfigModal(set)}
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <span className="px-2 py-1 text-[10px] uppercase font-bold tracking-wider rounded-full bg-green-100 text-green-700">
+                        Ready
+                      </span>
+                    </div>
+                    <h3 className="font-bold text-slate-900 mb-2 truncate">{set.title}</h3>
+                    <p className="text-slate-500 text-xs mb-4 h-10 overflow-hidden">{set.description || 'No description provided.'}</p>
+                    <div className="flex items-center gap-2 pt-2 mt-auto">
+                      <div className="flex -space-x-1 overflow-hidden">
+                         {set.sections.slice(0,4).map((s, i) => (
+                           <div key={i} className="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-600">
+                             {s.type[0]}
+                           </div>
+                         ))}
+                      </div>
+                      <span className="text-xs text-slate-400">{set.sections.length} Sections</span>
+                    </div>
+                  </div>
+                  
+                  {/* Card Footer - Actions */}
+                  <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end items-center z-10">
+                     <Button size="sm" onClick={() => openConfigModal(set)}>Start Practice</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+      </main>
+
+      {/* Configuration Modal */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title="Configure Your Practice"
+      >
+         <div className="space-y-4">
+            <p className="text-sm text-slate-500">
+               Select the sections you want to practice for <strong>{configSet?.title}</strong>.
+            </p>
+            <div className="space-y-2 border border-slate-100 bg-slate-50 rounded-lg p-3">
+               {configSet?.sections.map(section => (
+                  <label key={section.id} className="flex items-center p-3 bg-white border border-slate-200 rounded cursor-pointer hover:border-blue-400 transition-colors">
+                     <input 
+                        type="checkbox"
+                        className="w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        checked={selectedSections.has(section.id)}
+                        onChange={() => toggleSection(section.id)}
+                     />
+                     <div className="ml-3">
+                        <span className="block text-sm font-bold text-slate-700">{section.type}</span>
+                        <span className="block text-xs text-slate-400">{section.title}</span>
+                     </div>
+                  </label>
+               ))}
+            </div>
+            <div className="flex justify-end pt-4 gap-3">
+               <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancel</Button>
+               <Button onClick={startTest} disabled={selectedSections.size === 0}>
+                  Start Test ({selectedSections.size} Sections)
+               </Button>
+            </div>
+         </div>
+      </Modal>
+    </div>
+  );
+};
+
+// 7. ROOT COMPONENT
+const App: React.FC = () => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
+
+  // Restore session on mount
+  useEffect(() => {
+    const stored = localStorage.getItem('celprep_user_session');
+    if (stored) {
+      try {
+        const parsedUser = JSON.parse(stored);
+        setUser(parsedUser);
+      } catch (err) {
+        console.error("Failed to restore session", err);
+        localStorage.removeItem('celprep_user_session');
+      }
+    }
+    setIsAuthChecking(false);
+  }, []);
+
+  // Persist session on login
+  const handleLogin = (u: User) => {
+    localStorage.setItem('celprep_user_session', JSON.stringify(u));
+    setUser(u);
+  };
+
+  // Clear session on logout
+  const handleLogout = () => {
+    localStorage.removeItem('celprep_user_session');
+    setUser(null);
+  };
+
+  if (isAuthChecking) {
+    return <div className="h-screen flex items-center justify-center bg-slate-50 text-slate-400 animate-pulse">Loading session...</div>;
+  }
 
   if (!user) {
-     return <LoginScreen onLogin={handleLogin} />;
+    return <LoginScreen onLogin={handleLogin} />;
   }
 
   if (user.role === 'admin') {
-     return <AdminDashboard user={user} onLogout={handleLogout} />;
+    return <AdminDashboard user={user} onLogout={handleLogout} />;
   }
 
-  if (activeSet) {
-     return <TestRunner set={activeSet} onComplete={handleTestComplete} onExit={() => setActiveSet(null)} />;
-  }
-
-  // USER DASHBOARD
-  return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
-       {/* Header */}
-       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm sticky top-0 z-30">
-          <div className="flex items-center gap-2">
-             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">C</div>
-             <h1 className="text-xl font-bold tracking-tight">CELPrep<span className="text-blue-600">Master</span></h1>
-          </div>
-          <div className="flex items-center gap-6">
-             <div className="hidden md:block text-right">
-                <div className="text-sm font-bold text-slate-800">{user.name}</div>
-                <div className="text-xs text-slate-500">{user.email}</div>
-             </div>
-             <Button variant="outline" size="sm" onClick={handleLogout}>Sign Out</Button>
-          </div>
-       </header>
-
-       <main className="max-w-6xl mx-auto p-6 space-y-10">
-          
-          {/* Available Tests Section */}
-          <section>
-             <div className="flex items-center justify-between mb-6">
-                <div>
-                    <h2 className="text-2xl font-bold text-slate-900">Practice Tests</h2>
-                    <p className="text-slate-500">Select a test to begin your preparation.</p>
-                </div>
-                {loading && <span className="text-sm text-blue-600 animate-pulse">Refreshing...</span>}
-             </div>
-
-             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {availableSets.map(set => (
-                   <div key={set.id} className="bg-white rounded-xl shadow-sm border border-slate-200 hover:shadow-lg hover:border-blue-200 transition-all flex flex-col group overflow-hidden">
-                      <div className="h-2 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
-                      <div className="p-6 flex-1 flex flex-col">
-                         <div className="flex justify-between items-start mb-3">
-                             <h3 className="font-bold text-lg text-slate-900 group-hover:text-blue-600 transition-colors">{set.title}</h3>
-                         </div>
-                         <p className="text-slate-500 text-sm mb-6 flex-1">{set.description || "No description provided."}</p>
-                         
-                         <div className="flex items-center gap-2 mb-6 flex-wrap">
-                            {/* Derive tags from section types */}
-                            {Array.from(new Set(set.sections.map(s => s.type))).map(type => (
-                               <span key={type} className="px-2 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-wider rounded">
-                                  {type}
-                               </span>
-                            ))}
-                         </div>
-
-                         <Button onClick={() => handleStartTest(set)} className="w-full justify-center shadow-blue-100 shadow-md">
-                            Start Practice
-                         </Button>
-                      </div>
-                   </div>
-                ))}
-                
-                {!loading && availableSets.length === 0 && (
-                   <div className="col-span-full py-16 text-center bg-white rounded-xl border border-dashed border-slate-200">
-                      <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-50 mb-4">
-                         <svg className="w-8 h-8 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-                      </div>
-                      <h3 className="text-lg font-medium text-slate-900">No Tests Available</h3>
-                      <p className="text-slate-500">Check back later for new practice materials.</p>
-                   </div>
-                )}
-             </div>
-          </section>
-
-          {/* Past Attempts Section */}
-          <section>
-             <h2 className="text-2xl font-bold text-slate-900 mb-6">Recent Activity</h2>
-             
-             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                {userAttempts.length > 0 ? (
-                    <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-50 text-slate-500 uppercase font-bold text-xs border-b border-slate-100">
-                            <tr>
-                                <th className="px-6 py-4 whitespace-nowrap">Test Name</th>
-                                <th className="px-6 py-4 whitespace-nowrap">Date Taken</th>
-                                <th className="px-6 py-4 whitespace-nowrap">Overall Band</th>
-                                <th className="px-6 py-4 whitespace-nowrap">Performance</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {userAttempts.map((att) => (
-                                <tr key={att.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-6 py-4 font-bold text-slate-900">{att.setTitle}</td>
-                                    <td className="px-6 py-4 text-slate-500">{new Date(att.date).toLocaleDateString()}</td>
-                                    <td className="px-6 py-4">
-                                        <div className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold text-xs ${att.bandScore && att.bandScore >= 9 ? 'bg-green-100 text-green-700' : att.bandScore && att.bandScore >= 7 ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'}`}>
-                                            {att.bandScore || '-'}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex gap-2">
-                                            {Object.entries(att.sectionScores).map(([key, val]) => (
-                                                <div key={key} className="flex flex-col items-center">
-                                                   <span className="text-[10px] uppercase text-slate-400 font-bold tracking-tighter">{key.substring(0,3)}</span>
-                                                   <span className="font-mono font-bold text-slate-700">{val}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    </div>
-                ) : (
-                    <div className="p-12 text-center">
-                       <p className="text-slate-500">You haven't completed any tests yet.</p>
-                    </div>
-                )}
-             </div>
-          </section>
-
-       </main>
-    </div>
-  );
+  return <UserDashboard user={user} onLogout={handleLogout} />;
 };
 
 export default App;
