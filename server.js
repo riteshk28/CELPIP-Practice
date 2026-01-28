@@ -251,18 +251,53 @@ app.post('/api/evaluate-writing', async (req, res) => {
   const { questionText, userResponse } = req.body;
   if (!ai) return res.json({ bandScore: 7, feedback: "API Key missing.", corrections: "Check configuration." });
 
+  const systemInstruction = `You are an official CELPIP Writing Examiner. Your job is to grade the candidate's response with strict adherence to the CELPIP Performance Standards.
+
+  **Grading Rubric (4 Categories):**
+  1. **Content/Coherence**: Quality of ideas, organization, formatting, paragraphing.
+  2. **Vocabulary**: Word choice, range, precision, natural phrasing.
+  3. **Readability**: Grammar, sentence structure, punctuation, spelling.
+  4. **Task Fulfillment**: Relevance, completeness, word count (150-200 words), tone.
+
+  **Task Types:**
+  - **Task 1 (Email)**: Formal/Informal tone must match recipient. Must have salutation/sign-off.
+  - **Task 2 (Survey)**: Must express a clear option and justify it.
+
+  **Scoring Instructions:**
+  - Assign a CLB level (1-12) for *each* category.
+  - **CLB 7**: Adequate control, some errors but meaning is clear.
+  - **CLB 9**: Good control, only minor errors.
+  - **CLB 12**: Advanced/Native-like control.
+  - Be STRICT. Do not inflate scores.
+
+  **Output Requirements:**
+  - **bandScore**: The rounded average of the 4 categories.
+  - **scores**: A JSON object with the 4 category scores.
+  - **feedback**: Specific, actionable advice mentioning specific errors.
+  - **corrections**: A completely rewritten version of the candidate's text that achieves a perfect CLB 12 level.`;
+
   try {
     const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Evaluate CELPIP Writing.\nPROMPT: ${questionText}\nRESPONSE: ${userResponse}\nOUTPUT JSON: {bandScore, feedback, corrections}`,
+        contents: `Task Instructions: ${questionText}\n\nCandidate Response: ${userResponse}`,
         config: {
+            systemInstruction: systemInstruction,
             responseMimeType: "application/json",
             responseSchema: {
                 type: Type.OBJECT,
                 properties: {
-                    bandScore: { type: Type.NUMBER },
+                    bandScore: { type: Type.NUMBER, description: "Rounded overall CLB level (1-12)" },
+                    scores: {
+                        type: Type.OBJECT,
+                        properties: {
+                            content: { type: Type.NUMBER },
+                            vocabulary: { type: Type.NUMBER },
+                            readability: { type: Type.NUMBER },
+                            taskFulfillment: { type: Type.NUMBER }
+                        }
+                    },
                     feedback: { type: Type.STRING },
-                    corrections: { type: Type.STRING }
+                    corrections: { type: Type.STRING, description: "Rewritten response at CLB 12 level." }
                 }
             }
         }
@@ -284,7 +319,7 @@ app.post('/api/generate-speech', async (req, res) => {
     if (!text) return res.status(400).json({ error: "Text is required" });
 
     try {
-        // Detect speakers based on "Name:" pattern
+        // Detect speakers
         const speakerRegex = /^([A-Za-z0-9 ]+):/gm;
         const speakers = new Set();
         let match;

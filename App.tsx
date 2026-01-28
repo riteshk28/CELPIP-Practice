@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { User, PracticeSet, Attempt, QuestionType, WritingEvaluation } from './types';
@@ -484,8 +485,6 @@ const SetEditor: React.FC<{
     const section = set.sections.find(s => s.id === sectionId);
     if (!section) return;
     
-    // Default timer for listening audio parts can be small, user can adjust
-    // ADDED RANDOM STRING TO ID TO PREVENT COLLISION
     const newPart = {
       id: `part-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       sectionId,
@@ -1431,8 +1430,33 @@ const WritingEvaluationView: React.FC<{
                         <div key={part.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                             <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
                                 <h3 className="font-bold text-slate-700">Task {idx + 1}: {part.instructions ? part.instructions.substring(0, 50) + "..." : "Writing Response"}</h3>
-                                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">Score: {feedback.bandScore}</span>
+                                <div className="flex items-center gap-4">
+                                    <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">Overall CLB: {feedback.bandScore}</span>
+                                </div>
                             </div>
+                            
+                            {/* NEW: Score Breakdown Panel */}
+                            {feedback.scores && (
+                                <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div className="bg-white p-3 rounded border border-slate-200 text-center shadow-sm">
+                                        <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Content</div>
+                                        <div className="text-xl font-bold text-slate-700">{feedback.scores.content}</div>
+                                    </div>
+                                    <div className="bg-white p-3 rounded border border-slate-200 text-center shadow-sm">
+                                        <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Vocabulary</div>
+                                        <div className="text-xl font-bold text-slate-700">{feedback.scores.vocabulary}</div>
+                                    </div>
+                                    <div className="bg-white p-3 rounded border border-slate-200 text-center shadow-sm">
+                                        <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Readability</div>
+                                        <div className="text-xl font-bold text-slate-700">{feedback.scores.readability}</div>
+                                    </div>
+                                    <div className="bg-white p-3 rounded border border-slate-200 text-center shadow-sm">
+                                        <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Task Fulfillment</div>
+                                        <div className="text-xl font-bold text-slate-700">{feedback.scores.taskFulfillment}</div>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="p-6 grid md:grid-cols-2 gap-8">
                                 <div>
                                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 border-b border-slate-100 pb-2">Examiner Feedback</h4>

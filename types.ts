@@ -51,6 +51,12 @@ export interface PracticeSet {
 
 export interface WritingEvaluation {
     bandScore: number;
+    scores?: {
+        content: number;
+        vocabulary: number;
+        readability: number;
+        taskFulfillment: number;
+    };
     feedback: string;
     corrections: string;
 }
