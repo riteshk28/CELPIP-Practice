@@ -272,7 +272,7 @@ app.post('/api/evaluate-writing', async (req, res) => {
 
   try {
     const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-1.5-flash',
         contents: `Task Instructions: ${questionText}\n\nCandidate Response: ${userResponse}`,
         config: {
             systemInstruction: systemInstruction,
@@ -293,8 +293,7 @@ app.post('/api/evaluate-writing', async (req, res) => {
                     feedback: { type: Type.STRING },
                     corrections: { type: Type.STRING }
                 }
-            },
-            thinkingConfig: { thinkingBudget: 0 } 
+            }
         }
     });
     let text = response.text;
