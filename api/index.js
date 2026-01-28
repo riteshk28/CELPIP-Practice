@@ -246,14 +246,39 @@ app.post('/api/evaluate-writing', async (req, res) => {
   }
 });
 
+// HELPER: Convert Raw PCM to WAV
+function addWavHeader(pcmData, sampleRate = 24000, numChannels = 1) {
+    const header = Buffer.alloc(44);
+    const byteRate = sampleRate * numChannels * 2; // 16-bit = 2 bytes
+    const blockAlign = numChannels * 2;
+    const dataSize = pcmData.length;
+    const totalSize = 36 + dataSize;
+
+    header.write('RIFF', 0);
+    header.writeUInt32LE(totalSize, 4);
+    header.write('WAVE', 8);
+    header.write('fmt ', 12);
+    header.writeUInt32LE(16, 16); // Subchunk1Size
+    header.writeUInt16LE(1, 20); // AudioFormat (1 = PCM)
+    header.writeUInt16LE(numChannels, 22);
+    header.writeUInt32LE(sampleRate, 24);
+    header.writeUInt32LE(byteRate, 28);
+    header.writeUInt16LE(blockAlign, 32);
+    header.writeUInt16LE(16, 34); // BitsPerSample
+    header.write('data', 36);
+    header.writeUInt32LE(dataSize, 40);
+
+    return Buffer.concat([header, pcmData]);
+}
+
 // 9. GENERATE SPEECH (New & Enhanced)
 app.post('/api/generate-speech', async (req, res) => {
     const { text } = req.body;
     if (!ai) return res.status(500).json({ error: "API Key missing" });
+    if (!text) return res.status(400).json({ error: "Text is required" });
 
     try {
         // 1. Detect all unique speaker labels (e.g. "Man 1:", "Woman 2:", "Narrator:")
-        // Matches any word(s) before a colon at the start of a line
         const speakerRegex = /^([A-Za-z0-9 ]+):/gm;
         const speakers = new Set();
         let match;
@@ -263,9 +288,7 @@ app.post('/api/generate-speech', async (req, res) => {
         const uniqueSpeakers = Array.from(speakers);
 
         // 2. Define Voice Pool
-        // Male/Neutral voices
         const maleVoices = ['Fenrir', 'Charon', 'Puck', 'Zephyr'];
-        // Female voices
         const femaleVoices = ['Kore', 'Aoede'];
         
         let mIndex = 0;
@@ -277,14 +300,12 @@ app.post('/api/generate-speech', async (req, res) => {
         if (uniqueSpeakers.length > 0) {
             uniqueSpeakers.forEach(speaker => {
                 const lower = speaker.toLowerCase();
-                let voiceName = 'Fenrir'; // Default fallback
+                let voiceName = 'Fenrir'; 
 
-                // Heuristic: If name implies female, use female voice list
                 if (lower.includes('woman') || lower.includes('girl') || lower.includes('lady') || lower.includes('mother') || lower.includes('jane') || lower.includes('sarah') || lower.includes('ms')) {
                     voiceName = femaleVoices[fIndex % femaleVoices.length];
                     fIndex++;
                 } 
-                // Otherwise use male/neutral voice list (including for "Narrator", "Man 1", "Boy")
                 else {
                     voiceName = maleVoices[mIndex % maleVoices.length];
                     mIndex++;
@@ -299,7 +320,6 @@ app.post('/api/generate-speech', async (req, res) => {
 
         let config = {};
         
-        // If we found speakers, use Multi-Speaker config
         if (speakerVoiceConfigs.length > 0) {
             config = {
                 responseModalities: ["AUDIO"],
@@ -310,7 +330,6 @@ app.post('/api/generate-speech', async (req, res) => {
                 }
             };
         } else {
-            // No speakers found (Monologue), use single speaker config
             config = {
                 responseModalities: ["AUDIO"],
                 speechConfig: {
@@ -325,14 +344,19 @@ app.post('/api/generate-speech', async (req, res) => {
             config: config
         });
 
-        const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-        if (!base64Audio) throw new Error("No audio generated");
+        const rawPcmBase64 = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (!rawPcmBase64) throw new Error("No audio generated from Gemini.");
 
-        res.json({ audioData: `data:audio/mp3;base64,${base64Audio}` });
+        // CONVERT RAW PCM TO WAV
+        const pcmBuffer = Buffer.from(rawPcmBase64, 'base64');
+        const wavBuffer = addWavHeader(pcmBuffer, 24000); // 24kHz is default for Gemini TTS
+        const wavBase64 = wavBuffer.toString('base64');
+
+        res.json({ audioData: `data:audio/wav;base64,${wavBase64}` });
 
     } catch (err) {
         console.error("TTS Error:", err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err.message || "Failed to generate speech" });
     }
 });
 
