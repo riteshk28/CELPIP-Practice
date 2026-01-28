@@ -1575,23 +1575,32 @@ const TestRunner: React.FC<{
   const analyzeWriting = async () => {
     setIsAnalyzing(true);
     const feedbackMap: Record<string, WritingEvaluation> = {};
-    
-    // Only analyze parts that belong to writing sections
     const writingSections = set.sections.filter(s => s.type === 'WRITING');
     
+    // Use Promise.all to run evaluations in parallel
+    const analysisPromises: Promise<void>[] = [];
+
     for (const sec of writingSections) {
         for (const p of sec.parts) {
-            // Use PART ID for retrieval, matching new storage logic
             const response = writingInputs[p.id]; 
             
             // Only send for evaluation if there is significant text
             if (response && response.trim().length > 10) {
-                 const result = await API.evaluateWriting(p.instructions + "\n" + p.contentText, response);
-                 if (result) {
-                     feedbackMap[p.id] = result;
-                 }
+                 const promise = API.evaluateWriting(p.instructions + "\n" + p.contentText, response)
+                    .then(result => {
+                        if (result) {
+                            feedbackMap[p.id] = result;
+                        }
+                    })
+                    .catch(err => console.error("Failed part evaluation:", err));
+                 
+                 analysisPromises.push(promise);
             }
         }
+    }
+    
+    if (analysisPromises.length > 0) {
+        await Promise.all(analysisPromises);
     }
     
     setAiFeedback(feedbackMap);

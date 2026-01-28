@@ -298,7 +298,8 @@ app.post('/api/evaluate-writing', async (req, res) => {
                     feedback: { type: Type.STRING },
                     corrections: { type: Type.STRING, description: "Rewritten response at CLB 12 level." }
                 }
-            }
+            },
+            thinkingConfig: { thinkingBudget: 0 } // Disable thinking to improve latency
         }
     });
     let text = response.text;
