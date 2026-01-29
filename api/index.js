@@ -248,13 +248,36 @@ app.get('/api/attempts/:userId', async (req, res) => {
 // 8. EVALUATE WRITING
 app.post('/api/evaluate-writing', async (req, res) => {
   const { questionText, userResponse } = req.body;
-  if (!ai) return res.json({ bandScore: 7, feedback: "API Key missing.", corrections: "Check configuration." });
+  if (!ai) return res.json({ bandScore: 0, feedback: "API Key missing.", corrections: "System Error" });
+
+  const systemInstruction = `You are a certified CELPIP Writing Examiner. Evaluate the candidate's response based on the 4 pillars of the CELPIP Performance Standards.
+
+  **Evaluation Pillars:**
+  1. **Content/Coherence:** Quality of ideas, depth, logical organization, paragraphing, and flow.
+  2. **Vocabulary:** Range, precision, and suitability of word choice.
+  3. **Readability:** Grammar, sentence structure (simple vs complex), punctuation, and spelling.
+  4. **Task Fulfillment:** Relevance, completeness (addressing all bullet points/requirements), word count, and tone consistency.
+
+  **Task Specific Context:**
+  - **Task 1 (Email):** Check for appropriate Tone (Formal vs Informal) based on the recipient. Ensure all 3 bullet points are fully addressed.
+  - **Task 2 (Survey):** Check for a clear opinion and strong supporting justifications.
+
+  **Scoring Rule:**
+  - Assign a holistic **CLB Level (1-12)**.
+  - Be realistic. CLB 9+ requires sophisticated vocabulary and complex sentence structures with negligible errors.
+  - CLB 7-8 allows for some errors but communication must be effective.
+
+  **Output Requirements (JSON):**
+  - **bandScore**: Integer (1-12).
+  - **feedback**: A Markdown-formatted string. Use headers like "### Content/Coherence" to structure the feedback. Be specific about strengths and weaknesses for each pillar.
+  - **corrections**: A Markdown-formatted string. List 3-5 specific errors found in the text with corrections. Format: "* **Error:** [original] -> **Fix:** [correction] ([Reason])"`;
 
   try {
     const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Evaluate CELPIP Writing.\nPROMPT: ${questionText}\nRESPONSE: ${userResponse}\nOUTPUT JSON: {bandScore, feedback, corrections}`,
+        contents: `Task Instructions: ${questionText}\n\nCandidate Response: ${userResponse}`,
         config: {
+            systemInstruction: systemInstruction,
             responseMimeType: "application/json",
             responseSchema: {
                 type: Type.OBJECT,
