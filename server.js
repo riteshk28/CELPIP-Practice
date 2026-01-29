@@ -251,32 +251,36 @@ app.post('/api/evaluate-writing', async (req, res) => {
   const { questionText, userResponse } = req.body;
   if (!ai) return res.json({ bandScore: 0, feedback: "API Key missing.", corrections: "System Error" });
 
-  const systemInstruction = `You are a certified CELPIP Writing Examiner. Evaluate the candidate's response based on the 4 pillars of the CELPIP Performance Standards.
+  // 1. Calculate word count server-side to prevent hallucination
+  const wordCount = userResponse ? userResponse.trim().split(/\s+/).length : 0;
+
+  const systemInstruction = `You are a certified CELPIP Writing Examiner. Evaluate the candidate's writing based on the official Performance Standards.
+
+  **CRITICAL INSTRUCTIONS:**
+  1. **Strictly use the provided Metadata Word Count.** Do not recount. If the count is 150-200 (Task 1) or 150-200 (Task 2), it is adequate. Do not penalize for length if it meets these bounds.
+  2. **Do not censor complaints.** CELPIP Task 2 often requires writing a complaint. This is a fictional exam context. Treat "angry" or "complaining" tones as appropriate task fulfillment if the prompt asks for it.
+  3. **Score Accurately:**
+     - **CLB 10-12:** Advanced vocabulary, complex sentence structures, negligible errors. (AWARD THIS if the text is high quality. Do not default to 7-8).
+     - **CLB 7-9:** Effective communication, some minor errors.
+     - **CLB 1-6:** Frequent errors hindering communication.
 
   **Evaluation Pillars:**
-  1. **Content/Coherence:** Quality of ideas, depth, logical organization, paragraphing, and flow.
-  2. **Vocabulary:** Range, precision, and suitability of word choice.
-  3. **Readability:** Grammar, sentence structure (simple vs complex), punctuation, and spelling.
-  4. **Task Fulfillment:** Relevance, completeness (addressing all bullet points/requirements), word count, and tone consistency.
+  1. **Content/Coherence:** Logical flow, paragraphing, quality of ideas.
+  2. **Vocabulary:** Range and precision.
+  3. **Readability:** Grammar, punctuation, sentence variety.
+  4. **Task Fulfillment:** Relevance, completeness, tone.
 
-  **Task Specific Context:**
-  - **Task 1 (Email):** Check for appropriate Tone (Formal vs Informal) based on the recipient. Ensure all 3 bullet points are fully addressed.
-  - **Task 2 (Survey):** Check for a clear opinion and strong supporting justifications.
-
-  **Scoring Rule:**
-  - Assign a holistic **CLB Level (1-12)**.
-  - Be realistic. CLB 9+ requires sophisticated vocabulary and complex sentence structures with negligible errors.
-  - CLB 7-8 allows for some errors but communication must be effective.
-
-  **Output Requirements (JSON):**
-  - **bandScore**: Integer (1-12).
-  - **feedback**: A Markdown-formatted string. Use headers like "### Content/Coherence" to structure the feedback. Be specific about strengths and weaknesses for each pillar.
-  - **corrections**: A Markdown-formatted string. List 3-5 specific errors found in the text with corrections. Format: "* **Error:** [original] -> **Fix:** [correction] ([Reason])"`;
+  **Output Requirements (JSON ONLY):**
+  Return a SINGLE JSON object. No markdown formatting outside the strings.
+  - bandScore: number (1-12)
+  - feedback: string (Structured with headers like "### Content")
+  - corrections: string (List specific errors: "* **Error:** ... -> **Fix:** ...")
+  `;
 
   try {
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: `Task Instructions: ${questionText}\n\nCandidate Response: ${userResponse}`,
+        contents: `Task Instructions: ${questionText}\n\nCandidate Response: ${userResponse}\n\n**METADATA: Word Count: ${wordCount}**`,
         config: {
             systemInstruction: systemInstruction,
             responseMimeType: "application/json",
@@ -287,16 +291,34 @@ app.post('/api/evaluate-writing', async (req, res) => {
                     feedback: { type: Type.STRING },
                     corrections: { type: Type.STRING }
                 }
-            }
+            },
+            // Disable safety filters to prevent Task 2 (complaints) from being blocked
+            safetySettings: [
+                { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
+            ]
         }
     });
+
     let text = response.text;
+    if (!text) throw new Error("Empty response from AI");
+
+    // Clean potential markdown blocks if model ignores MIME type
     if (text.startsWith('```json')) text = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
     else if (text.startsWith('```')) text = text.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    
     res.json(JSON.parse(text));
+
   } catch (err) {
-    console.error("Gemini Error:", err);
-    res.status(500).json({ error: "Failed to evaluate writing." });
+    console.error("Gemini Eval Error:", err);
+    // Return a fallback JSON so the Frontend doesn't crash
+    res.json({
+        bandScore: 0,
+        feedback: `### Error\nUnable to generate evaluation. \n\n**Details:** ${err.message || "Unknown error"}. \n\nPlease try again.`,
+        corrections: "No corrections available."
+    });
   }
 });
 
