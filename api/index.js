@@ -262,37 +262,23 @@ app.post('/api/evaluate-writing', async (req, res) => {
   - **Task 1 (Email):** Check for appropriate Tone (Formal vs Informal) based on the recipient. Ensure all 3 bullet points are fully addressed.
   - **Task 2 (Survey):** Check for a clear opinion and strong supporting justifications.
 
-**Scoring Rule (Very Important):**
-- Assign a holistic **CLB Level (1–12)** using the band anchors below.
-- Evaluate all 4 pillars, but DO NOT over-penalize minor weaknesses if overall communication quality is high.
-- If a response clearly meets the description of a higher band, do NOT downgrade it due to isolated or minor errors.
-- Use the **highest band that the response consistently meets**, not the lowest.
-
-  **CLB Band Anchors (Writing):**
-
-  - **CLB 12:** Near-native control. Sophisticated ideas, precise vocabulary, varied complex sentence structures, flawless task fulfillment, and virtually no errors.
-  - **CLB 11:** Highly polished and professional. Strong argumentation or message clarity, advanced vocabulary, excellent cohesion, and only trivial, barely noticeable errors.
-  - **CLB 10:** Clear, well-developed, and effective throughout. Strong vocabulary, frequent complex sentences, clear organization, and minor non-disruptive errors only.
-  - **CLB 9:** Very effective communication. Ideas are well supported and organized. Vocabulary is varied and appropriate. Some minor errors may appear but do not reduce clarity or quality.
-  - **CLB 8:** Generally clear and competent. Task is fully addressed. Vocabulary and grammar are adequate with noticeable but manageable errors. Meaning is never unclear.
-  - **CLB 7:** Adequate and functional writing. Main ideas are clear, task requirements are mostly met, but errors and limited complexity reduce overall quality.
-  - **CLB 6:** Limited effectiveness. Ideas may be underdeveloped or repetitive. Frequent grammar or vocabulary issues, but the message is still understandable.
-  - **CLB 5:** Basic communication. Meaning is sometimes unclear due to errors, weak organization, or incomplete task fulfillment.
-  - **CLB 4:** Very limited writing ability. Frequent errors, weak coherence, and poor task fulfillment significantly affect understanding.
-  - **CLB 3:** Minimal control. Ideas are difficult to follow. Vocabulary and grammar are extremely limited.
-  - **CLB 2:** Fragmented or memorized language. Meaning is mostly unclear.
-  - **CLB 1:** Incomprehensible or irrelevant response.
-
-  **Anti-Downgrading Rule (Critical):**
-  - If the response is clearly stronger than CLB 7 quality, DO NOT assign CLB 7.
-  - If the response matches CLB 9 characteristics overall, assign CLB 9 even if minor issues exist.
-  - Minor grammar, spelling, or repetition issues alone must NOT prevent a CLB 9 or 10 score.
+  **Scoring Rule:**
+  - Assign a holistic **CLB Level (1-12)**.
+  - Be realistic. CLB 9+ requires sophisticated vocabulary and complex sentence structures with negligible errors.
+  - CLB 7-8 allows for some errors but communication must be effective.
+  - Do not equate polished or well-organized writing with high CLB levels.
+  - CLB 9+ requires evidence of language control beyond correctness, such as flexibility, nuance, or natural phrasing — not just formality or clarity.
+  - Do not downgrade a response solely due to lack of stylistic complexity if communication is precise, natural, and fully effective.
 
 
   **Output Requirements (JSON):**
+  - Do NOT add examiner signatures, commentary outside the requested sections, or repeated filler text.
+  - Output only the required JSON fields.
+
   - **bandScore**: Integer (1-12).
   - **feedback**: A Markdown-formatted string. Use headers like "### Content/Coherence" to structure the feedback. Be specific about strengths and weaknesses for each pillar.
   - **corrections**: A Markdown-formatted string. List 3-5 specific errors found in the text with corrections. Format: "* **Error:** [original] -> **Fix:** [correction] ([Reason])"`;
+
 
   try {
     const response = await ai.models.generateContent({
