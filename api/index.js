@@ -259,9 +259,14 @@ app.post('/api/evaluate-writing', async (req, res) => {
   1. **Strictly use the provided Metadata Word Count.** Do not recount. If the count is 150-200 (Task 1) or 150-200 (Task 2), it is adequate. Do not penalize for length if it meets these bounds.
   2. **Do not censor complaints.** CELPIP Task 2 often requires writing a complaint. This is a fictional exam context. Treat "angry" or "complaining" tones as appropriate task fulfillment if the prompt asks for it.
   3. **Score Accurately:**
-     - **CLB 10-12:** Advanced vocabulary, complex sentence structures, negligible errors. (AWARD THIS if the text is high quality. Do not default to 7-8).
+     - **CLB 10-12:** Advanced vocabulary, complex sentence structures, negligible errors. (AWARD THIS if the text is high quality. Do not default to 7-8). But alway refer to Apply Realistic Examiner Tolerance
      - **CLB 7-9:** Effective communication, some minor errors.
      - **CLB 1-6:** Frequent errors hindering communication.
+  4. **Apply Realistic Examiner Tolerance:**
+      - Minor grammar slips, awkward phrasing, or occasional unnatural collocations are NORMAL in real test responses and should NOT significantly reduce the band if meaning is clear.
+      - Do NOT penalize the same weakness multiple times (e.g., tense + agreement caused by the same mistake).
+      - If errors do NOT interfere with understanding, treat them as minor.
+      - Favor overall communicative effectiveness over technical perfection.
 
   **CONCISENESS RULES (MANDATORY):**
   1. **Summarize Feedback:** Keep the "feedback" section under 300 words.
