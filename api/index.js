@@ -301,6 +301,8 @@ app.post('/api/evaluate-writing', async (req, res) => {
   - If the submission includes **both Task 1 and Task 2**, evaluate **both tasks**.
   - Do NOT skip any task that is present.
   - If only one task is present, evaluate only that task.
+  - Task 1 and Task 2 must be evaluated independently. It is acceptable and expected for the two tasks to receive different CLB levels.
+
 
   ---
 
@@ -314,6 +316,7 @@ app.post('/api/evaluate-writing', async (req, res) => {
   - CLB 9+ requires evidence of language control beyond correctness, such as flexibility, nuance, or natural expression — not just formality.
   - Do not downgrade a response solely due to limited stylistic complexity if communication is precise, natural, and fully effective.
   - Do not inflate scores for safe, competent writing that lacks depth, development, or linguistic range.
+  - Do not adjust one task's score to match the other. Score each task based solely on its own writing quality.
 
   ---
 
@@ -333,7 +336,7 @@ app.post('/api/evaluate-writing', async (req, res) => {
     - ### Vocabulary
     - ### Readability
     - ### Task Fulfillment  
-    Be specific and balanced. Identify both strengths and weaknesses.
+
 
   - **corrections**: A Markdown-formatted string.  
     List **3–5 specific errors actually found** in the text.  
