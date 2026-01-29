@@ -268,25 +268,25 @@ app.post('/api/evaluate-writing', async (req, res) => {
 - If a response clearly meets the description of a higher band, do NOT downgrade it due to isolated or minor errors.
 - Use the **highest band that the response consistently meets**, not the lowest.
 
-**CLB Band Anchors (Writing):**
+  **CLB Band Anchors (Writing):**
 
-- **CLB 12:** Near-native control. Sophisticated ideas, precise vocabulary, varied complex sentence structures, flawless task fulfillment, and virtually no errors.
-- **CLB 11:** Highly polished and professional. Strong argumentation or message clarity, advanced vocabulary, excellent cohesion, and only trivial, barely noticeable errors.
-- **CLB 10:** Clear, well-developed, and effective throughout. Strong vocabulary, frequent complex sentences, clear organization, and minor non-disruptive errors only.
-- **CLB 9:** Very effective communication. Ideas are well supported and organized. Vocabulary is varied and appropriate. Some minor errors may appear but do not reduce clarity or quality.
-- **CLB 8:** Generally clear and competent. Task is fully addressed. Vocabulary and grammar are adequate with noticeable but manageable errors. Meaning is never unclear.
-- **CLB 7:** Adequate and functional writing. Main ideas are clear, task requirements are mostly met, but errors and limited complexity reduce overall quality.
-- **CLB 6:** Limited effectiveness. Ideas may be underdeveloped or repetitive. Frequent grammar or vocabulary issues, but the message is still understandable.
-- **CLB 5:** Basic communication. Meaning is sometimes unclear due to errors, weak organization, or incomplete task fulfillment.
-- **CLB 4:** Very limited writing ability. Frequent errors, weak coherence, and poor task fulfillment significantly affect understanding.
-- **CLB 3:** Minimal control. Ideas are difficult to follow. Vocabulary and grammar are extremely limited.
-- **CLB 2:** Fragmented or memorized language. Meaning is mostly unclear.
-- **CLB 1:** Incomprehensible or irrelevant response.
+  - **CLB 12:** Near-native control. Sophisticated ideas, precise vocabulary, varied complex sentence structures, flawless task fulfillment, and virtually no errors.
+  - **CLB 11:** Highly polished and professional. Strong argumentation or message clarity, advanced vocabulary, excellent cohesion, and only trivial, barely noticeable errors.
+  - **CLB 10:** Clear, well-developed, and effective throughout. Strong vocabulary, frequent complex sentences, clear organization, and minor non-disruptive errors only.
+  - **CLB 9:** Very effective communication. Ideas are well supported and organized. Vocabulary is varied and appropriate. Some minor errors may appear but do not reduce clarity or quality.
+  - **CLB 8:** Generally clear and competent. Task is fully addressed. Vocabulary and grammar are adequate with noticeable but manageable errors. Meaning is never unclear.
+  - **CLB 7:** Adequate and functional writing. Main ideas are clear, task requirements are mostly met, but errors and limited complexity reduce overall quality.
+  - **CLB 6:** Limited effectiveness. Ideas may be underdeveloped or repetitive. Frequent grammar or vocabulary issues, but the message is still understandable.
+  - **CLB 5:** Basic communication. Meaning is sometimes unclear due to errors, weak organization, or incomplete task fulfillment.
+  - **CLB 4:** Very limited writing ability. Frequent errors, weak coherence, and poor task fulfillment significantly affect understanding.
+  - **CLB 3:** Minimal control. Ideas are difficult to follow. Vocabulary and grammar are extremely limited.
+  - **CLB 2:** Fragmented or memorized language. Meaning is mostly unclear.
+  - **CLB 1:** Incomprehensible or irrelevant response.
 
-**Anti-Downgrading Rule (Critical):**
-- If the response is clearly stronger than CLB 7 quality, DO NOT assign CLB 7.
-- If the response matches CLB 9 characteristics overall, assign CLB 9 even if minor issues exist.
-- Minor grammar, spelling, or repetition issues alone must NOT prevent a CLB 9 or 10 score.
+  **Anti-Downgrading Rule (Critical):**
+  - If the response is clearly stronger than CLB 7 quality, DO NOT assign CLB 7.
+  - If the response matches CLB 9 characteristics overall, assign CLB 9 even if minor issues exist.
+  - Minor grammar, spelling, or repetition issues alone must NOT prevent a CLB 9 or 10 score.
 
 
   **Output Requirements (JSON):**
