@@ -263,11 +263,9 @@ app.post('/api/evaluate-writing', async (req, res) => {
      - **CLB 7-9:** Effective communication, some minor errors.
      - **CLB 1-6:** Frequent errors hindering communication.
 
-  **Evaluation Pillars:**
-  1. **Content/Coherence:** Logical flow, paragraphing, quality of ideas.
-  2. **Vocabulary:** Range and precision.
-  3. **Readability:** Grammar, punctuation, sentence variety.
-  4. **Task Fulfillment:** Relevance, completeness, tone.
+  **CONCISENESS RULES (MANDATORY):**
+  1. **Summarize Feedback:** Keep the "feedback" section under 300 words.
+  2. **Limit Corrections:** **ONLY list the Top 3-5 major errors.** Do NOT list every single minor grammar mistake. Listing too many corrections causes technical errors.
 
   **Output Requirements (JSON ONLY):**
   Return a SINGLE JSON object. No markdown formatting outside the strings.
@@ -283,6 +281,10 @@ app.post('/api/evaluate-writing', async (req, res) => {
         config: {
             systemInstruction: systemInstruction,
             responseMimeType: "application/json",
+            // Stop the model from generating infinite loops by capping tokens. 
+            // 4000 tokens is approx 3000 words, plenty for valid feedback but stops infinite loops.
+            maxOutputTokens: 4000, 
+            temperature: 0.7, // Lower temperature to reduce hallucinations/loops
             responseSchema: {
                 type: Type.OBJECT,
                 properties: {
