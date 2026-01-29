@@ -266,19 +266,11 @@ app.post('/api/evaluate-writing', async (req, res) => {
   - Assign a holistic **CLB Level (1-12)**.
   - Be realistic. CLB 9+ requires sophisticated vocabulary and complex sentence structures with negligible errors.
   - CLB 7-8 allows for some errors but communication must be effective.
-  - Do not equate polished or well-organized writing with high CLB levels.
-  - CLB 9+ requires evidence of language control beyond correctness, such as flexibility, nuance, or natural phrasing — not just formality or clarity.
-  - Do not downgrade a response solely due to lack of stylistic complexity if communication is precise, natural, and fully effective.
-
 
   **Output Requirements (JSON):**
-  - Do NOT add examiner signatures, commentary outside the requested sections, or repeated filler text.
-  - Output only the required JSON fields.
-
   - **bandScore**: Integer (1-12).
   - **feedback**: A Markdown-formatted string. Use headers like "### Content/Coherence" to structure the feedback. Be specific about strengths and weaknesses for each pillar.
   - **corrections**: A Markdown-formatted string. List 3-5 specific errors found in the text with corrections. Format: "* **Error:** [original] -> **Fix:** [correction] ([Reason])"`;
-
 
   try {
     const response = await ai.models.generateContent({
