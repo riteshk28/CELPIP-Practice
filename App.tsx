@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { User, PracticeSet, Attempt, QuestionType, WritingEvaluation } from './types';
@@ -457,7 +458,7 @@ const SetEditor: React.FC<{
 }> = ({ set, onChange, onSave, onCancel, isSaving }) => {
   const [activeSectionId, setActiveSectionId] = useState<string | null>(set.sections[0]?.id || null);
 
-  const addSection = (type: 'READING' | 'WRITING' | 'LISTENING') => {
+  const addSection = (type: 'READING' | 'WRITING' | 'LISTENING' | 'SPEAKING') => {
     const newSection = {
       id: `sec-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       setId: set.id,
@@ -484,15 +485,15 @@ const SetEditor: React.FC<{
     const section = set.sections.find(s => s.id === sectionId);
     if (!section) return;
     
-    // Default timer for listening audio parts can be small, user can adjust
-    // ADDED RANDOM STRING TO ID TO PREVENT COLLISION
+    // Default timer logic
     const newPart = {
       id: `part-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       sectionId,
-      timerSeconds: section.type === 'LISTENING' ? 0 : 600, 
+      timerSeconds: section.type === 'LISTENING' ? 0 : section.type === 'SPEAKING' ? 60 : 600, 
+      prepSeconds: section.type === 'SPEAKING' ? 30 : undefined,
       contentText: '',
       questions: [],
-      instructions: section.type === 'LISTENING' ? 'Listen to the audio clip.' : 'Read the text and answer the questions.'
+      instructions: section.type === 'LISTENING' ? 'Listen to the audio clip.' : section.type === 'SPEAKING' ? 'Read the prompt and prepare your response.' : 'Read the text and answer the questions.'
     };
     
     const updatedSection = { ...section, parts: [...section.parts, newPart] };
@@ -550,6 +551,9 @@ const SetEditor: React.FC<{
                <button onClick={() => addSection('LISTENING')} disabled={isSaving} className="flex flex-col items-center justify-center p-2 text-xs bg-white border border-slate-200 rounded hover:border-amber-400 hover:text-amber-600 transition-colors shadow-sm disabled:opacity-50">
                   <span className="font-bold">+ Listening</span>
                </button>
+               <button onClick={() => addSection('SPEAKING')} disabled={isSaving} className="flex flex-col items-center justify-center p-2 text-xs bg-white border border-slate-200 rounded hover:border-purple-400 hover:text-purple-600 transition-colors shadow-sm disabled:opacity-50">
+                  <span className="font-bold">+ Speaking</span>
+               </button>
             </div>
           </div>
           <div className="p-2 space-y-1">
@@ -595,10 +599,10 @@ const SetEditor: React.FC<{
               <div className="space-y-6">
                 <div className="flex justify-between items-center border-b border-slate-200 pb-2">
                    <h3 className="text-lg font-bold text-slate-800">
-                     {activeSection.type === 'LISTENING' ? 'Listening Screens (Tasks)' : 'Content Parts & Timers'}
+                     {activeSection.type === 'LISTENING' ? 'Listening Screens (Tasks)' : activeSection.type === 'SPEAKING' ? 'Speaking Prompts' : 'Content Parts & Timers'}
                    </h3>
                    <Button size="sm" variant="secondary" onClick={() => addPart(activeSection.id)} disabled={isSaving}>
-                     {activeSection.type === 'LISTENING' ? '+ Add Screen' : '+ Add Content'}
+                     {activeSection.type === 'LISTENING' ? '+ Add Screen' : activeSection.type === 'SPEAKING' ? '+ Add Prompt' : '+ Add Content'}
                    </Button>
                 </div>
                 
@@ -643,7 +647,6 @@ const PartEditor: React.FC<{
 }> = ({ part, index, sectionType, onChange, onDelete }) => {
   const [timerMode, setTimerMode] = useState<'sec' | 'mmss'>('sec');
   
-  // New State for Audio Generation
   const [isGenerating, setIsGenerating] = useState(false);
   const [audioSourceMode, setAudioSourceMode] = useState<'UPLOAD' | 'GENERATE'>('UPLOAD');
   const [generatingQ, setGeneratingQ] = useState<string | null>(null);
@@ -737,8 +740,7 @@ const PartEditor: React.FC<{
         const newQs = part.questions.map((q: any) => {
             if (q.id !== qId) return q;
             const newOptions = [...q.options];
-            newOptions[optIdx] = reader.result as string; // Store base64 image
-            // If this option was correct, update answer
+            newOptions[optIdx] = reader.result as string; 
             let newCorrect = q.correctAnswer;
             return { ...q, options: newOptions, correctAnswer: newCorrect === q.options[optIdx] ? reader.result : newCorrect };
         });
@@ -778,15 +780,45 @@ const PartEditor: React.FC<{
       <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex justify-between items-center">
         <div className="flex items-center gap-2">
            <span className="bg-white border border-slate-200 text-slate-500 text-xs font-bold px-2 py-0.5 rounded">
-             {sectionType === 'LISTENING' ? 'SCREEN ' : 'PART '} {index + 1}
+             {sectionType === 'LISTENING' ? 'SCREEN ' : sectionType === 'SPEAKING' ? 'TASK ' : 'PART '} {index + 1}
            </span>
            <span className="text-xs text-slate-400">
-             {sectionType === 'READING' ? 'Passage & Questions' : sectionType === 'WRITING' ? 'Writing Prompt' : 'Listening Task'}
+             {sectionType === 'READING' ? 'Passage & Questions' : sectionType === 'WRITING' ? 'Writing Prompt' : sectionType === 'SPEAKING' ? 'Speaking Prompt' : 'Listening Task'}
            </span>
         </div>
         <div className="flex items-center gap-3">
-          {/* Timer is relevant for Question Screens in Listening, or all screens in Reading/Writing */}
-          {(sectionType !== 'LISTENING' || listeningScreenType === 'QUESTIONS') && (
+          {/* Speaking has two timers */}
+          {sectionType === 'SPEAKING' && (
+             <>
+                <div className="flex items-center gap-1 bg-white border border-amber-200 rounded-md overflow-hidden shadow-sm mr-2">
+                    <div className="bg-amber-50 px-2 py-1 border-r border-amber-200">
+                        <span className="text-[10px] uppercase font-bold text-amber-600">Prep</span>
+                    </div>
+                    <input 
+                        type="text" 
+                        className="w-12 text-sm font-bold text-slate-700 outline-none text-center bg-white" 
+                        value={part.prepSeconds || 30}
+                        onChange={(e) => onChange({ ...part, prepSeconds: parseInt(e.target.value) || 0 })}
+                        placeholder="Sec"
+                    />
+                </div>
+                <div className="flex items-center gap-1 bg-white border border-red-200 rounded-md overflow-hidden shadow-sm">
+                    <div className="bg-red-50 px-2 py-1 border-r border-red-200">
+                        <span className="text-[10px] uppercase font-bold text-red-600">Record</span>
+                    </div>
+                    <input 
+                        type="text" 
+                        className="w-12 text-sm font-bold text-slate-700 outline-none text-center bg-white" 
+                        value={part.timerSeconds || 60}
+                        onChange={(e) => onChange({ ...part, timerSeconds: parseInt(e.target.value) || 0 })}
+                        placeholder="Sec"
+                    />
+                </div>
+             </>
+          )}
+
+          {/* Regular Timer Logic */}
+          {(sectionType !== 'LISTENING' && sectionType !== 'SPEAKING') && (
             <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-md overflow-hidden shadow-sm">
               <div className="bg-slate-100 px-2 py-1 border-r border-slate-200">
                  <span className="text-[10px] uppercase font-bold text-slate-500">Timer</span>
@@ -835,9 +867,7 @@ const PartEditor: React.FC<{
                     checked={listeningScreenType === 'AUDIO'} 
                     onChange={() => {
                         setListeningScreenType('AUDIO');
-                        // Clear questions if switching to Audio mode to avoid confusion? 
-                        // No, let's keep data just in case, but hide UI.
-                        onChange({ ...part, timerSeconds: 0 }); // Usually no timer for listening part
+                        onChange({ ...part, timerSeconds: 0 }); 
                     }}
                     className="text-blue-600 focus:ring-blue-500"
                  />
@@ -850,7 +880,7 @@ const PartEditor: React.FC<{
                     checked={listeningScreenType === 'QUESTIONS'} 
                     onChange={() => {
                         setListeningScreenType('QUESTIONS');
-                        onChange({ ...part, audioData: undefined }); // Clear main audio if switching to Questions mode
+                        onChange({ ...part, audioData: undefined });
                     }}
                     className="text-blue-600 focus:ring-blue-500"
                  />
@@ -863,7 +893,7 @@ const PartEditor: React.FC<{
           label="Instructions for Student" 
           value={part.instructions} 
           onChange={e => onChange({ ...part, instructions: e.target.value })} 
-          placeholder={sectionType === 'LISTENING' ? "e.g. Listen to the conversation..." : "e.g. Read the following email..."}
+          placeholder={sectionType === 'LISTENING' ? "e.g. Listen to the conversation..." : sectionType === 'SPEAKING' ? "e.g. Talk about a time you visited..." : "e.g. Read the following email..."}
           className="text-sm bg-white text-slate-900"
         />
       
@@ -871,15 +901,15 @@ const PartEditor: React.FC<{
         <div className="grid grid-cols-2 gap-8 h-[600px]">
            {/* LEFT COLUMN */}
            <div className="flex flex-col space-y-4 h-full overflow-hidden">
-              {/* Only show Text Editor if NOT Listening (or if needed for Listening instructions context) */}
-              {sectionType !== 'LISTENING' && (
+              {/* Only show Text Editor if NOT Listening Audio Mode */}
+              {(sectionType !== 'LISTENING' || listeningScreenType === 'QUESTIONS') && (
                 <div className="flex-1 flex flex-col min-h-0">
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Main Reading Passage</label>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{sectionType === 'SPEAKING' ? 'Prompt Description / Text' : 'Main Reading Passage'}</label>
                     <RichTextEditor 
                     className="w-full flex-1"
                     value={part.contentText}
                     onChange={val => onChange({ ...part, contentText: val })}
-                    placeholder="Paste the main reading passage here..."
+                    placeholder={sectionType === 'SPEAKING' ? "Enter the speaking topic here..." : "Paste the main reading passage here..."}
                     />
                 </div>
               )}
@@ -887,6 +917,7 @@ const PartEditor: React.FC<{
               {/* LISTENING: AUDIO GENERATION UI */}
               {sectionType === 'LISTENING' && listeningScreenType === 'AUDIO' && (
                   <div className="bg-amber-50/50 p-4 rounded-lg border border-amber-100 shrink-0 flex flex-col h-full overflow-hidden">
+                     {/* Existing Audio Generation Code */}
                      <div className="flex justify-between items-center mb-4 border-b border-amber-200 pb-2">
                         <label className="block text-sm font-bold text-amber-700 uppercase tracking-wider">Main Audio Clip</label>
                         <div className="flex bg-white rounded-md border border-slate-200 p-0.5">
@@ -945,7 +976,7 @@ const PartEditor: React.FC<{
               {/* Optional Reference Image */}
               <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 shrink-0 mt-auto">
                 <div className="flex justify-between items-center mb-2">
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Reference Image (Optional)</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">{sectionType === 'SPEAKING' ? 'Scene / Image Prompt' : 'Reference Image (Optional)'}</label>
                   {part.imageData && (
                     <button 
                       onClick={() => onChange({ ...part, imageData: undefined })}
@@ -965,11 +996,32 @@ const PartEditor: React.FC<{
               </div>
            </div>
 
-           {/* RIGHT COLUMN: Question List */}
+           {/* RIGHT COLUMN: Question List or Speaking View Placeholder */}
            <div className={`flex flex-col h-full overflow-hidden bg-slate-50 rounded-xl border border-slate-200 p-4 ${sectionType === 'LISTENING' && listeningScreenType === 'AUDIO' ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-              {/* Only enable questions if NOT Listening Audio Mode */}
-              {(sectionType === 'READING' || (sectionType === 'LISTENING' && listeningScreenType === 'QUESTIONS')) ? (
+              
+              {sectionType === 'SPEAKING' ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center p-6">
+                      <div className="w-16 h-16 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mb-4">
+                        <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+                      </div>
+                      <h3 className="font-bold text-slate-700 mb-2">Speaking Task Configured</h3>
+                      <p className="text-sm text-slate-500 mb-4">
+                          Student will see the prompt and image on the left.
+                      </p>
+                      <div className="grid grid-cols-2 gap-4 w-full max-w-xs text-sm">
+                          <div className="bg-white p-3 rounded border border-slate-200">
+                             <span className="block text-[10px] uppercase font-bold text-slate-400">Prep Time</span>
+                             <span className="font-bold text-amber-600">{part.prepSeconds || 30}s</span>
+                          </div>
+                          <div className="bg-white p-3 rounded border border-slate-200">
+                             <span className="block text-[10px] uppercase font-bold text-slate-400">Record Time</span>
+                             <span className="font-bold text-red-600">{part.timerSeconds}s</span>
+                          </div>
+                      </div>
+                  </div>
+              ) : (sectionType === 'READING' || (sectionType === 'LISTENING' && listeningScreenType === 'QUESTIONS')) ? (
                 <>
+                   {/* Existing Questions List Logic */}
                    {/* Item List */}
                    <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar mb-4">
                      {numberedQuestions.length === 0 && (
@@ -1347,14 +1399,14 @@ const SectionReview: React.FC<{
    );
 };
 
-// --- NEW COMPONENT: WRITING EVALUATION VIEW ---
-const WritingEvaluationView: React.FC<{
-    section: any;
-    aiFeedback: Record<string, WritingEvaluation>;
+// --- NEW COMPONENT: WRITING & SPEAKING EVALUATION VIEW ---
+const AIEvaluationView: React.FC<{
+    sectionType: 'WRITING' | 'SPEAKING';
+    results: Record<string, WritingEvaluation>;
     onExit: () => void;
-}> = ({ section, aiFeedback, onExit }) => {
+}> = ({ sectionType, results, onExit }) => {
     // Calculate average band score
-    const scores = Object.values(aiFeedback).map((f: WritingEvaluation) => f.bandScore);
+    const scores = Object.values(results).map((f: WritingEvaluation) => f.bandScore);
     const averageScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
 
     // Helper to render simple text with bold markers (**text**) and headers (### text)
@@ -1408,8 +1460,8 @@ const WritingEvaluationView: React.FC<{
         <div className="h-screen flex flex-col bg-slate-50">
              <header className="bg-white border-b border-slate-200 px-8 py-6 flex justify-between items-center shadow-sm z-10">
                 <div>
-                    <h2 className="text-2xl font-bold text-slate-800 tracking-tight">AI Writing Evaluation</h2>
-                    <p className="text-slate-500 mt-1">Detailed analysis of your writing performance.</p>
+                    <h2 className="text-2xl font-bold text-slate-800 tracking-tight">AI {sectionType === 'SPEAKING' ? 'Speaking' : 'Writing'} Evaluation</h2>
+                    <p className="text-slate-500 mt-1">Detailed analysis of your performance.</p>
                 </div>
                 <div className="flex items-center gap-4">
                     <div className="text-right">
@@ -1423,14 +1475,14 @@ const WritingEvaluationView: React.FC<{
             </header>
 
             <div className="flex-1 overflow-y-auto p-8 max-w-5xl mx-auto w-full space-y-8">
-                {section.parts.map((part: any, idx: number) => {
-                    const feedback = aiFeedback[part.id];
+                {Object.entries(results).map(([partId, rawFeedback], idx) => {
+                    const feedback = rawFeedback as WritingEvaluation;
                     if (!feedback) return null;
 
                     return (
-                        <div key={part.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div key={partId} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                             <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
-                                <h3 className="font-bold text-slate-700">Task {idx + 1}: {part.instructions ? part.instructions.substring(0, 50) + "..." : "Writing Response"}</h3>
+                                <h3 className="font-bold text-slate-700">Task {idx + 1} Result</h3>
                                 <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">Score: {feedback.bandScore}</span>
                             </div>
                             <div className="p-6 grid md:grid-cols-2 gap-8">
@@ -1474,22 +1526,115 @@ const TestRunner: React.FC<{
   const [aiFeedback, setAiFeedback] = useState<Record<string, WritingEvaluation>>({});
   const [showEvaluation, setShowEvaluation] = useState(false);
   
-  // Derived state to identify if current screen is "Audio Only" or "Question Set"
+  // SPEAKING STATES
+  const [speakingPhase, setSpeakingPhase] = useState<'PREP' | 'RECORDING' | 'DONE'>('PREP');
+  const [speakingInputs, setSpeakingInputs] = useState<Record<string, string>>({}); // PartID -> Base64 Audio
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const [audioLevel, setAudioLevel] = useState(0); // For Visualizer
+
+  // Derived state
   const section = set.sections[currentSectionIndex];
   const part = section?.parts[currentPartIndex];
   const isAudioScreen = section?.type === 'LISTENING' && part?.audioData && (!part.questions || part.questions.length === 0);
+  const isSpeakingScreen = section?.type === 'SPEAKING';
 
-  // Initialize timer
+  // Initialize Timer and Phase
   useEffect(() => {
     if (part) {
-      setTimeLeft(part.timerSeconds || 0);
+      if (isSpeakingScreen) {
+          setSpeakingPhase('PREP');
+          setTimeLeft(part.prepSeconds || 30);
+      } else {
+          setTimeLeft(part.timerSeconds || 0);
+      }
     }
-  }, [part]);
+  }, [part, isSpeakingScreen]);
+
+  // Speaking Phase Transitions
+  useEffect(() => {
+      if (!isSpeakingScreen || speakingPhase === 'DONE') return;
+
+      if (timeLeft === 0) {
+          if (speakingPhase === 'PREP') {
+              // Switch to Recording
+              startRecording();
+          } else if (speakingPhase === 'RECORDING') {
+              // Finish Recording
+              stopRecording();
+          }
+      }
+  }, [timeLeft, isSpeakingScreen, speakingPhase]);
+
+  const startRecording = async () => {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                audioChunksRef.current.push(event.data);
+            }
+        };
+
+        mediaRecorder.onstop = async () => {
+            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+            // Convert to Base64
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            reader.onloadend = () => {
+                 const base64data = reader.result as string;
+                 setSpeakingInputs(prev => ({ ...prev, [part.id]: base64data }));
+                 // Proceed to next automatically
+                 handleNext(); 
+            };
+            
+            // Stop tracks
+            stream.getTracks().forEach(track => track.stop());
+        };
+
+        mediaRecorder.start();
+        setSpeakingPhase('RECORDING');
+        setTimeLeft(part.timerSeconds || 60);
+
+        // Simple Visualizer
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const analyser = audioContext.createAnalyser();
+        const microphone = audioContext.createMediaStreamSource(stream);
+        microphone.connect(analyser);
+        analyser.fftSize = 256;
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        
+        const updateLevel = () => {
+            if (mediaRecorder.state === 'recording') {
+                analyser.getByteFrequencyData(dataArray);
+                const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+                setAudioLevel(average);
+                requestAnimationFrame(updateLevel);
+            }
+        };
+        updateLevel();
+
+    } catch (err) {
+        alert("Microphone access denied. You cannot complete speaking tasks.");
+        handleNext(); // Skip if mic fails
+    }
+  };
+
+  const stopRecording = () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+          mediaRecorderRef.current.stop();
+          setSpeakingPhase('DONE'); // Will trigger next on onStop callback
+      } else {
+          handleNext();
+      }
+  };
 
   useEffect(() => {
-    // Timer logic: 
-    // If it's an Audio Screen, we generally pause timer or let audio duration dictate flow (infinite time).
-    // If it's a Question Screen, we countdown.
+    // Regular Timer Countdown
     if (isAudioScreen || showReview || showEvaluation || isAnalyzing || timeLeft <= 0) {
        return; 
     }
@@ -1548,24 +1693,30 @@ const TestRunner: React.FC<{
      }
   };
 
-  const analyzeWriting = async () => {
+  const analyzeResponses = async () => {
     setIsAnalyzing(true);
     const feedbackMap: Record<string, WritingEvaluation> = {};
     
-    // Only analyze parts that belong to writing sections
+    // 1. Analyze Writing
     const writingSections = set.sections.filter(s => s.type === 'WRITING');
-    
     for (const sec of writingSections) {
         for (const p of sec.parts) {
-            // Use PART ID for retrieval, matching new storage logic
             const response = writingInputs[p.id]; 
-            
-            // Only send for evaluation if there is significant text
             if (response && response.trim().length > 10) {
                  const result = await API.evaluateWriting(p.instructions + "\n" + p.contentText, response);
-                 if (result) {
-                     feedbackMap[p.id] = result;
-                 }
+                 if (result) feedbackMap[p.id] = result;
+            }
+        }
+    }
+
+    // 2. Analyze Speaking
+    const speakingSections = set.sections.filter(s => s.type === 'SPEAKING');
+    for (const sec of speakingSections) {
+        for (const p of sec.parts) {
+            const audio = speakingInputs[p.id]; 
+            if (audio) {
+                 const result = await API.evaluateSpeaking(p.instructions + "\n" + p.contentText, audio);
+                 if (result) feedbackMap[p.id] = result;
             }
         }
     }
@@ -1576,10 +1727,10 @@ const TestRunner: React.FC<{
   };
 
   const finishTest = async () => {
-    // If it's a writing test involved, trigger AI analysis before final submission
-    const hasWriting = set.sections.some(s => s.type === 'WRITING');
-    if (hasWriting && !showEvaluation) {
-        await analyzeWriting();
+    // If AI evaluation needed (Writing or Speaking)
+    const needsAI = set.sections.some(s => s.type === 'WRITING' || s.type === 'SPEAKING');
+    if (needsAI && !showEvaluation) {
+        await analyzeResponses();
         return;
     }
 
@@ -1604,10 +1755,8 @@ const TestRunner: React.FC<{
         });
         scores[sec.id] = secScore;
       }
-      if (sec.type === 'WRITING') {
-          // Use AI score if available, otherwise default 0
-          // Sum up part scores? Average them?
-          // If multiple parts, average the band score.
+      if (sec.type === 'WRITING' || sec.type === 'SPEAKING') {
+          // Average AI scores
           const partScores = sec.parts.map(p => {
              const feedback = aiFeedback[p.id];
              return feedback ? (feedback as WritingEvaluation).bandScore : 0;
@@ -1622,11 +1771,7 @@ const TestRunner: React.FC<{
     onComplete(results);
   };
 
-  // Logic to calculate numbering for displayed questions (skipping Passages)
-  // We need to calculate this once upfront so numbers are consistent across the whole SECTION
-  // However, in this view, we only render questions for the CURRENT PART. 
-  // IMPORTANT: For Listening, questions are split across parts. We should probably number them 1..N per part, or global?
-  // Let's stick to Part-based numbering for now as it's simpler.
+  // Logic to calculate numbering
   let questionCounter = 0;
   const numberedQuestions = part ? part.questions.map((q: any) => {
      if (q.type !== 'PASSAGE') {
@@ -1636,7 +1781,6 @@ const TestRunner: React.FC<{
      return { ...q, displayNum: null };
   }) : [];
 
-  // Helper to safely render plain text or HTML content for the main left pane
   const renderMainContent = (content: string) => {
       if (!content) return null;
       if (content.includes('<') && content.includes('>')) {
@@ -1649,19 +1793,25 @@ const TestRunner: React.FC<{
       return (
           <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-center p-8">
               <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-6"></div>
-              <h2 className="text-2xl font-bold text-slate-800 mb-2">Analyzing your Writing...</h2>
+              <h2 className="text-2xl font-bold text-slate-800 mb-2">Analyzing Responses...</h2>
               <p className="text-slate-500 max-w-md">
-                  Gemini AI is evaluating your response against CELPIP criteria for coherence, vocabulary, and grammar. This may take a few seconds.
+                  Gemini AI is evaluating your performance against CELPIP criteria. This may take a moment.
               </p>
           </div>
       );
   }
 
   if (showEvaluation) {
+      // Determine dominant section type for title
+      const evalType = set.sections.some(s => s.type === 'WRITING') ? 'WRITING' : 'SPEAKING';
+      // If both exist, we might need a combined view, but AIEvaluationView handles map of all feedback.
+      // We'll pass the first relevant section found to extract some context if needed.
+      const relevantSection = set.sections.find(s => s.type === 'WRITING' || s.type === 'SPEAKING') || section;
+      
       return (
-        <WritingEvaluationView 
-            section={set.sections.find(s => s.type === 'WRITING') || section} // Pass the writing section (or current if it is writing)
-            aiFeedback={aiFeedback} 
+        <AIEvaluationView 
+            sectionType={relevantSection.type === 'WRITING' ? 'WRITING' : 'SPEAKING'}
+            results={aiFeedback} 
             onExit={finishTest} 
         />
       );
@@ -1682,17 +1832,29 @@ const TestRunner: React.FC<{
           <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
              <span>{section.title}</span>
              <span>•</span>
-             <span className="text-blue-400">Screen {currentPartIndex + 1} of {section.parts.length}</span>
+             <span className="text-blue-400">
+                {isSpeakingScreen ? `Task ${currentPartIndex + 1}` : `Screen ${currentPartIndex + 1}`} of {section.parts.length}
+             </span>
           </div>
         </div>
         <div className="flex items-center gap-6">
-           <div className={`text-xl font-mono font-bold bg-slate-800 px-3 py-1 rounded ${timeLeft < 60 && !isAudioScreen ? 'text-red-400 animate-pulse' : 'text-emerald-400'}`}>
-             {isAudioScreen ? 'AUDIO PLAYING' : formatTime(timeLeft)}
+           <div className={`text-xl font-mono font-bold bg-slate-800 px-3 py-1 rounded ${
+               isSpeakingScreen ? (speakingPhase === 'RECORDING' ? 'text-red-500 animate-pulse' : 'text-amber-400') : (timeLeft < 60 && !isAudioScreen ? 'text-red-400 animate-pulse' : 'text-emerald-400')
+           }`}>
+             {isAudioScreen ? 'AUDIO PLAYING' : 
+              isSpeakingScreen ? (speakingPhase === 'PREP' ? `PREP: ${timeLeft}s` : `REC: ${timeLeft}s`) : 
+              formatTime(timeLeft)}
            </div>
            <Button variant="danger" size="sm" onClick={onExit} className="opacity-80 hover:opacity-100">Exit Test</Button>
-           <Button variant="primary" onClick={handleNext} className="bg-blue-600 hover:bg-blue-500 font-bold px-6">
+           <Button 
+                variant="primary" 
+                onClick={() => isSpeakingScreen && speakingPhase === 'RECORDING' ? stopRecording() : handleNext()} 
+                className={`bg-blue-600 hover:bg-blue-500 font-bold px-6 ${isSpeakingScreen && speakingPhase === 'PREP' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                disabled={isSpeakingScreen && speakingPhase === 'PREP'}
+           >
              {isAudioScreen ? 'Skip Audio' : 
-              (currentSectionIndex === set.sections.length - 1 && currentPartIndex === section.parts.length - 1 ? 'Finish Test' : 'Next Screen →')}
+              isSpeakingScreen && speakingPhase === 'RECORDING' ? 'Finish Recording' :
+              (currentSectionIndex === set.sections.length - 1 && currentPartIndex === section.parts.length - 1 ? 'Finish Test' : 'Next →')}
            </Button>
         </div>
       </header>
@@ -1720,7 +1882,7 @@ const TestRunner: React.FC<{
           </div>
       )}
 
-      {/* VIEW: QUESTION / CONTENT SCREEN */}
+      {/* VIEW: QUESTION / CONTENT / SPEAKING SCREEN */}
       {!isAudioScreen && (
         <div className="flex-1 flex overflow-hidden animate-in fade-in duration-300">
             {/* Left Pane: Instructions -> Text -> Image */}
@@ -1733,14 +1895,12 @@ const TestRunner: React.FC<{
                     </div>
                 )}
                 
-                {/* For Listening Question Screens, we show a "Audio Completed" placeholder if user wants context */}
                 {section.type === 'LISTENING' && (
                     <div className="mb-6 opacity-70 border border-slate-300 rounded-lg p-4 bg-slate-200 text-center text-slate-500 text-xs font-bold uppercase tracking-wider">
                        Audio Recording Completed
                     </div>
                 )}
 
-                {/* --- NEW: Listening Question Audio Players in Left Pane --- */}
                 {section.type === 'LISTENING' && !isAudioScreen && (
                     <div className="space-y-4 mb-6">
                         {numberedQuestions.map((q: any) => (
@@ -1759,14 +1919,47 @@ const TestRunner: React.FC<{
                 </div>
 
                 {part.imageData && (
-                    <img src={part.imageData} alt="Reference" className="w-full rounded-lg shadow-md border border-slate-200" />
+                    <img src={part.imageData} alt="Reference" className="w-full rounded-lg shadow-md border border-slate-200 object-contain max-h-[400px] bg-white" />
                 )}
             </div>
             </div>
 
-            {/* Right Pane: Questions (MCQ) and Passages */}
+            {/* Right Pane: Questions (MCQ) or Writing Input or Speaking Mic */}
             <div className="w-1/2 p-8 overflow-y-auto bg-white scroll-smooth relative">
-            {(section.type === 'READING' || section.type === 'LISTENING') ? (
+            
+            {/* SPEAKING MODE UI */}
+            {isSpeakingScreen ? (
+                <div className="flex flex-col items-center justify-center h-full">
+                    <div className={`w-64 h-64 rounded-full flex items-center justify-center border-8 transition-all duration-500 ${
+                        speakingPhase === 'RECORDING' 
+                        ? 'border-red-500 shadow-2xl scale-110' 
+                        : 'border-amber-400'
+                    }`}>
+                        <div className="text-center">
+                            {speakingPhase === 'PREP' ? (
+                                <>
+                                    <h3 className="text-amber-600 font-bold text-lg uppercase tracking-widest mb-2">Preparation</h3>
+                                    <div className="text-6xl font-mono font-bold text-slate-800">{timeLeft}</div>
+                                    <p className="text-slate-400 text-sm mt-2">Get ready to speak</p>
+                                </>
+                            ) : (
+                                <>
+                                    <h3 className="text-red-600 font-bold text-lg uppercase tracking-widest mb-2">Recording</h3>
+                                    <div className="text-6xl font-mono font-bold text-slate-800">{timeLeft}</div>
+                                    <div className="h-2 w-32 bg-slate-200 rounded-full mt-4 overflow-hidden">
+                                        <div className="h-full bg-red-500 transition-all duration-75" style={{ width: `${Math.min(100, audioLevel / 255 * 300)}%` }}></div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                    <p className="mt-12 text-slate-500 italic max-w-sm text-center">
+                        {speakingPhase === 'PREP' 
+                            ? "Study the prompt on the left. Recording will start automatically when preparation time ends." 
+                            : "Speak clearly into your microphone. Recording stops automatically when time runs out."}
+                    </p>
+                </div>
+            ) : (section.type === 'READING' || section.type === 'LISTENING') ? (
                 <div className="space-y-6 pb-12">
                     {numberedQuestions.map((q: any) => {
                     if (q.type === 'PASSAGE') {

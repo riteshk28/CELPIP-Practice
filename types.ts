@@ -30,7 +30,8 @@ export interface Part {
   audioData?: string; // Base64 audio for Listening parts
   instructions?: string;
   questions: Question[]; // Now contains MCQs, CLOZE definitions, AND PASSAGE blocks mixed
-  timerSeconds: number; // Duration for this specific part
+  timerSeconds: number; // Duration for this specific part (Recording time for Speaking)
+  prepSeconds?: number; // Preparation time for Speaking tasks
 }
 
 export interface Section {

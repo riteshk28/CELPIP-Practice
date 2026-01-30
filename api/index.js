@@ -117,6 +117,7 @@ app.get('/api/sets', async (req, res) => {
                 'audioData', p.audio_data,
                 'instructions', p.instructions,
                 'timerSeconds', COALESCE(p.timer_seconds, 600),
+                'prepSeconds', COALESCE(p.prep_seconds, 30),
                 'questions', COALESCE((
                   SELECT json_agg(json_build_object(
                     'id', q.id,
@@ -168,8 +169,8 @@ app.post('/api/sets', async (req, res) => {
       let partOrder = 0;
       for (const part of sec.parts) {
         await client.query(
-          'INSERT INTO parts (id, section_id, content_text, image_data, audio_data, instructions, timer_seconds, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-          [part.id, sec.id, part.contentText, part.imageData, part.audioData, part.instructions, part.timerSeconds, partOrder++]
+          'INSERT INTO parts (id, section_id, content_text, image_data, audio_data, instructions, timer_seconds, prep_seconds, order_index) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+          [part.id, sec.id, part.contentText, part.imageData, part.audioData, part.instructions, part.timerSeconds, part.prepSeconds || 30, partOrder++]
         );
 
         let qOrder = 0;
@@ -259,14 +260,9 @@ app.post('/api/evaluate-writing', async (req, res) => {
   1. **Strictly use the provided Metadata Word Count.** Do not recount. If the count is 150-200 (Task 1) or 150-200 (Task 2), it is adequate. Do not penalize for length if it meets these bounds.
   2. **Do not censor complaints.** CELPIP Task 2 often requires writing a complaint. This is a fictional exam context. Treat "angry" or "complaining" tones as appropriate task fulfillment if the prompt asks for it.
   3. **Score Accurately:**
-     - **CLB 10-12:** Advanced vocabulary, complex sentence structures, negligible errors. (AWARD THIS if the text is high quality. Do not default to 7-8). But alway refer to Apply Realistic Examiner Tolerance
+     - **CLB 10-12:** Advanced vocabulary, complex sentence structures, negligible errors. (AWARD THIS if the text is high quality. Do not default to 7-8).
      - **CLB 7-9:** Effective communication, some minor errors.
      - **CLB 1-6:** Frequent errors hindering communication.
-  4. **Apply Realistic Examiner Tolerance:**
-      - Minor grammar slips, awkward phrasing, or occasional unnatural collocations are NORMAL in real test responses and should NOT significantly reduce the band if meaning is clear.
-      - Do NOT penalize the same weakness multiple times (e.g., tense + agreement caused by the same mistake).
-      - If errors do NOT interfere with understanding, treat them as minor.
-      - Favor overall communicative effectiveness over technical perfection.
 
   **CONCISENESS RULES (MANDATORY):**
   1. **Summarize Feedback:** Keep the "feedback" section under 300 words.
@@ -286,10 +282,8 @@ app.post('/api/evaluate-writing', async (req, res) => {
         config: {
             systemInstruction: systemInstruction,
             responseMimeType: "application/json",
-            // Stop the model from generating infinite loops by capping tokens. 
-            // 4000 tokens is approx 3000 words, plenty for valid feedback but stops infinite loops.
             maxOutputTokens: 4000, 
-            temperature: 0.7, // Lower temperature to reduce hallucinations/loops
+            temperature: 0.7, 
             responseSchema: {
                 type: Type.OBJECT,
                 properties: {
@@ -298,7 +292,6 @@ app.post('/api/evaluate-writing', async (req, res) => {
                     corrections: { type: Type.STRING }
                 }
             },
-            // Disable safety filters to prevent Task 2 (complaints) from being blocked
             safetySettings: [
                 { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
                 { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
@@ -319,7 +312,6 @@ app.post('/api/evaluate-writing', async (req, res) => {
 
   } catch (err) {
     console.error("Gemini Eval Error:", err);
-    // Return a fallback JSON so the Frontend doesn't crash
     res.json({
         bandScore: 0,
         feedback: `### Error\nUnable to generate evaluation. \n\n**Details:** ${err.message || "Unknown error"}. \n\nPlease try again.`,
@@ -328,14 +320,89 @@ app.post('/api/evaluate-writing', async (req, res) => {
   }
 });
 
-// 9. GENERATE SPEECH (New Endpoint)
+// 9. EVALUATE SPEAKING (New Endpoint)
+app.post('/api/evaluate-speaking', async (req, res) => {
+    const { prompt, audioData } = req.body;
+    if (!ai) return res.json({ bandScore: 0, feedback: "API Key missing.", corrections: "System Error" });
+    if (!audioData) return res.json({ bandScore: 0, feedback: "No audio data received.", corrections: "" });
+
+    // Extract base64 data (remove "data:audio/webm;base64," prefix if present)
+    const base64Audio = audioData.split(',')[1] || audioData;
+
+    const systemInstruction = `You are a certified CELPIP Speaking Examiner. Evaluate the candidate's spoken response based on the official Performance Standards.
+  
+    **Evaluation Criteria:**
+    1. **Content/Coherence:** Did they answer the prompt? Is it logical?
+    2. **Vocabulary:** Range and precision of words.
+    3. **Listenability:** Pronunciation, intonation, pausing, and rhythm.
+    4. **Task Fulfillment:** Tone, register, and length.
+  
+    **Score Accurately:**
+       - **CLB 10-12:** Native-like fluency, complex grammar, very few errors.
+       - **CLB 7-9:** Clear communication, some hesitation or minor errors.
+       - **CLB 1-6:** Difficulty expressing ideas, frequent pauses/errors.
+  
+    **Output Requirements (JSON ONLY):**
+    Return a SINGLE JSON object.
+    - bandScore: number (1-12)
+    - feedback: string (General feedback on strengths and weaknesses)
+    - corrections: string (Specific advice on pronunciation or grammar)
+    `;
+  
+    try {
+      const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: {
+            parts: [
+                { text: `Task Prompt: ${prompt}\n\nPlease evaluate the following audio response:` },
+                { inlineData: { mimeType: 'audio/webm', data: base64Audio } }
+            ]
+          },
+          config: {
+              systemInstruction: systemInstruction,
+              responseMimeType: "application/json",
+              maxOutputTokens: 2000, 
+              temperature: 0.7,
+              responseSchema: {
+                  type: Type.OBJECT,
+                  properties: {
+                      bandScore: { type: Type.NUMBER },
+                      feedback: { type: Type.STRING },
+                      corrections: { type: Type.STRING }
+                  }
+              },
+              safetySettings: [
+                  { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+                  { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' }
+              ]
+          }
+      });
+  
+      let text = response.text;
+      if (!text) throw new Error("Empty response from AI");
+  
+      if (text.startsWith('```json')) text = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      else if (text.startsWith('```')) text = text.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      
+      res.json(JSON.parse(text));
+  
+    } catch (err) {
+      console.error("Gemini Speaking Eval Error:", err);
+      res.json({
+          bandScore: 0,
+          feedback: `### Error\nUnable to generate evaluation. \n\n**Details:** ${err.message || "Unknown error"}.`,
+          corrections: "Please ensure your microphone is working and try again."
+      });
+    }
+  });
+
+// 10. GENERATE SPEECH
 app.post('/api/generate-speech', async (req, res) => {
     const { text } = req.body;
     if (!ai) return res.status(500).json({ error: "API Key missing" });
     if (!text) return res.status(400).json({ error: "Text is required" });
 
     try {
-        // Detect speakers
         const speakerRegex = /^([A-Za-z0-9 ]+):/gm;
         const speakers = new Set();
         let match;
@@ -346,12 +413,8 @@ app.post('/api/generate-speech', async (req, res) => {
 
         let config = {};
 
-        // If 2 or more speakers detected, use multi-speaker config
         if (uniqueSpeakers.length >= 2) {
-            // Assign specific voices to the first few unique speakers found
-            // Voices: Fenrir (M), Kore (F), Puck (M), Charon (M)
             const voices = ['Fenrir', 'Kore', 'Puck', 'Charon'];
-            
             const speakerConfigs = uniqueSpeakers.slice(0, 4).map((speakerName, index) => ({
                 speaker: speakerName,
                 voiceConfig: { prebuiltVoiceConfig: { voiceName: voices[index % voices.length] } }
@@ -366,7 +429,6 @@ app.post('/api/generate-speech', async (req, res) => {
                 }
             };
         } else {
-            // Single speaker fallback
             config = {
                 responseModalities: ["AUDIO"],
                 speechConfig: {

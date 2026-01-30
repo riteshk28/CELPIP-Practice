@@ -119,6 +119,22 @@ export const API = {
     }
   },
 
+  // Evaluate Speaking
+  evaluateSpeaking: async (prompt: string, audioData: string): Promise<WritingEvaluation | null> => {
+    try {
+        const res = await fetch(`${API_URL}/evaluate-speaking`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt, audioData }),
+        });
+        if (!res.ok) return null;
+        return await res.json();
+    } catch (e) {
+        console.error("Speaking evaluation failed", e);
+        return null;
+    }
+  },
+
   // Generate Speech (TTS)
   generateSpeech: async (text: string): Promise<{ audioData: string } | null> => {
     try {
