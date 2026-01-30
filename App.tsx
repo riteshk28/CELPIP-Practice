@@ -1532,6 +1532,10 @@ const TestRunner: React.FC<{
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const [audioLevel, setAudioLevel] = useState(0); // For Visualizer
+  
+  // RACE CONDITION HANDLING
+  const previousPartIdRef = useRef<string | null>(null);
+  const speakingInputsRef = useRef<Record<string, string>>({}); // Immediate access for evaluation
 
   // Derived state
   const section = set.sections[currentSectionIndex];
@@ -1539,37 +1543,45 @@ const TestRunner: React.FC<{
   const isAudioScreen = section?.type === 'LISTENING' && part?.audioData && (!part.questions || part.questions.length === 0);
   const isSpeakingScreen = section?.type === 'SPEAKING';
 
-  // Initialize Timer and Phase
+  // Initialize Timer and Phase (Fixes Jump Issue)
   useEffect(() => {
     if (part) {
-      if (isSpeakingScreen) {
-          setSpeakingPhase('PREP');
-          setTimeLeft(part.prepSeconds || 30);
-      } else {
-          setTimeLeft(part.timerSeconds || 0);
+      if (previousPartIdRef.current !== part.id) {
+          // New Part Loaded
+          if (isSpeakingScreen) {
+              setSpeakingPhase('PREP');
+              setTimeLeft(part.prepSeconds || 30);
+          } else {
+              setTimeLeft(part.timerSeconds || 0);
+          }
+          previousPartIdRef.current = part.id;
       }
     }
   }, [part, isSpeakingScreen]);
 
-  // Speaking Phase Transitions
+  // Speaking Phase Transitions (Fixes Race Condition)
   useEffect(() => {
       if (!isSpeakingScreen || speakingPhase === 'DONE') return;
 
-      if (timeLeft === 0) {
+      // Ensure we don't trigger on stale 0s from previous parts
+      if (timeLeft === 0 && part && previousPartIdRef.current === part.id) {
           if (speakingPhase === 'PREP') {
-              // Switch to Recording
               startRecording();
           } else if (speakingPhase === 'RECORDING') {
-              // Finish Recording
               stopRecording();
           }
       }
-  }, [timeLeft, isSpeakingScreen, speakingPhase]);
+  }, [timeLeft, isSpeakingScreen, speakingPhase, part]);
 
   const startRecording = async () => {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mediaRecorder = new MediaRecorder(stream);
+        // Use standard MIME type or fallback
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
+                         ? 'audio/webm;codecs=opus' 
+                         : 'audio/webm';
+        
+        const mediaRecorder = new MediaRecorder(stream, { mimeType });
         mediaRecorderRef.current = mediaRecorder;
         audioChunksRef.current = [];
 
@@ -1581,25 +1593,28 @@ const TestRunner: React.FC<{
 
         mediaRecorder.onstop = async () => {
             const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-            // Convert to Base64
+            
+            // Cleanup tracks
+            stream.getTracks().forEach(track => track.stop());
+
             const reader = new FileReader();
             reader.readAsDataURL(audioBlob);
             reader.onloadend = () => {
                  const base64data = reader.result as string;
+                 // Update State AND Ref for immediate access
                  setSpeakingInputs(prev => ({ ...prev, [part.id]: base64data }));
-                 // Proceed to next automatically
+                 speakingInputsRef.current[part.id] = base64data;
+                 
+                 // Trigger next step
                  handleNext(); 
             };
-            
-            // Stop tracks
-            stream.getTracks().forEach(track => track.stop());
         };
 
         mediaRecorder.start();
         setSpeakingPhase('RECORDING');
         setTimeLeft(part.timerSeconds || 60);
 
-        // Simple Visualizer
+        // Visualizer Setup
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
         const analyser = audioContext.createAnalyser();
         const microphone = audioContext.createMediaStreamSource(stream);
@@ -1619,22 +1634,23 @@ const TestRunner: React.FC<{
         updateLevel();
 
     } catch (err) {
+        console.error(err);
         alert("Microphone access denied. You cannot complete speaking tasks.");
-        handleNext(); // Skip if mic fails
+        handleNext(); 
     }
   };
 
   const stopRecording = () => {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
           mediaRecorderRef.current.stop();
-          setSpeakingPhase('DONE'); // Will trigger next on onStop callback
+          setSpeakingPhase('DONE'); 
       } else {
           handleNext();
       }
   };
 
+  // Timer Countdown Effect
   useEffect(() => {
-    // Regular Timer Countdown
     if (isAudioScreen || showReview || showEvaluation || isAnalyzing || timeLeft <= 0) {
        return; 
     }
@@ -1653,19 +1669,12 @@ const TestRunner: React.FC<{
   };
 
   const handleNext = () => {
-    // If on Audio screen, Next acts as "Skip Audio" or "Continue" if done.
     if (isAudioScreen) {
-        if (confirm("Skip audio and continue?")) {
-            // just proceed
-        } else {
-            return;
-        }
+        if (!confirm("Skip audio and continue?")) return;
     }
 
-    // Check if we are at the end of the section
     const isLastPart = currentPartIndex === section.parts.length - 1;
     
-    // READING / LISTENING REVIEW
     if (isLastPart && (section.type === 'READING' || section.type === 'LISTENING') && !showReview) {
         setShowReview(true);
         return;
@@ -1674,11 +1683,9 @@ const TestRunner: React.FC<{
     if (currentPartIndex < section.parts.length - 1) {
       setCurrentPartIndex(prev => prev + 1);
     } else if (currentSectionIndex < set.sections.length - 1) {
-      // Moving to next section
       setCurrentSectionIndex(prev => prev + 1);
       setCurrentPartIndex(0);
     } else {
-      // Test Finished
       finishTest();
     }
   };
@@ -1713,7 +1720,8 @@ const TestRunner: React.FC<{
     const speakingSections = set.sections.filter(s => s.type === 'SPEAKING');
     for (const sec of speakingSections) {
         for (const p of sec.parts) {
-            const audio = speakingInputs[p.id]; 
+            // CRITICAL FIX: Use Ref for immediate access if state update is pending
+            const audio = speakingInputsRef.current[p.id] || speakingInputs[p.id]; 
             if (audio) {
                  const result = await API.evaluateSpeaking(p.instructions + "\n" + p.contentText, audio);
                  if (result) feedbackMap[p.id] = result;
@@ -1727,7 +1735,6 @@ const TestRunner: React.FC<{
   };
 
   const finishTest = async () => {
-    // If AI evaluation needed (Writing or Speaking)
     const needsAI = set.sections.some(s => s.type === 'WRITING' || s.type === 'SPEAKING');
     if (needsAI && !showEvaluation) {
         await analyzeResponses();
@@ -1743,7 +1750,6 @@ const TestRunner: React.FC<{
         let secScore = 0;
         sec.parts.forEach(p => {
           p.questions.forEach(q => {
-            // Only count MCQs and CLOZE definitions as scorable questions
             if (q.type !== 'PASSAGE') {
               totalQuestions++;
               if (answers[q.id] === q.correctAnswer) {
@@ -1756,7 +1762,6 @@ const TestRunner: React.FC<{
         scores[sec.id] = secScore;
       }
       if (sec.type === 'WRITING' || sec.type === 'SPEAKING') {
-          // Average AI scores
           const partScores = sec.parts.map(p => {
              const feedback = aiFeedback[p.id];
              return feedback ? (feedback as WritingEvaluation).bandScore : 0;
@@ -1802,10 +1807,6 @@ const TestRunner: React.FC<{
   }
 
   if (showEvaluation) {
-      // Determine dominant section type for title
-      const evalType = set.sections.some(s => s.type === 'WRITING') ? 'WRITING' : 'SPEAKING';
-      // If both exist, we might need a combined view, but AIEvaluationView handles map of all feedback.
-      // We'll pass the first relevant section found to extract some context if needed.
       const relevantSection = set.sections.find(s => s.type === 'WRITING' || s.type === 'SPEAKING') || section;
       
       return (
