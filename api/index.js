@@ -329,7 +329,7 @@ app.post('/api/evaluate-speaking', async (req, res) => {
     // Extract base64 data (remove "data:audio/webm;base64," prefix if present)
     const base64Audio = audioData.split(',')[1] || audioData;
 
-    const systemInstruction = `You are a certified CELPIP Speaking Examiner. Evaluate the candidate's spoken response based on the official Performance Standards.
+    const systemInstruction = `You are a certified CELPIP Speaking Examiner. Evaluate the candidate's spoken response based on the official Performance Standards. Keep feedback concise. Do not provide lengthy examples.
   
     **Evaluation Criteria:**
     1. **Content/Coherence:** Did they answer the prompt? Is it logical?
@@ -361,7 +361,7 @@ app.post('/api/evaluate-speaking', async (req, res) => {
           config: {
               systemInstruction: systemInstruction,
               responseMimeType: "application/json",
-              maxOutputTokens: 2000, 
+              maxOutputTokens: 4000, 
               temperature: 0.7,
               responseSchema: {
                   type: Type.OBJECT,
