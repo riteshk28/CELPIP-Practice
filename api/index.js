@@ -336,6 +336,10 @@ app.post('/api/evaluate-speaking', async (req, res) => {
     2. **Vocabulary:** Range and precision of words.
     3. **Listenability:** Pronunciation, intonation, pausing, and rhythm.
     4. **Task Fulfillment:** Tone, register, and length.
+    **Constraints**
+    1. Word Count Limit:  "Feedback must be under 200 words."
+    2. Bullet Point Limit: "Provide exactly 3-5 bullet points for corrections."
+    3. Negative Constraint:  "Do NOT transcribe the audio."
   
     **Score Accurately:**
        - **CLB 10-12:** Native-like fluency, complex grammar, very few errors.
